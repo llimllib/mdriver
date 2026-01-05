@@ -365,8 +365,10 @@ impl StreamingParser {
             // Check for **bold**
             if i + 1 < chars.len() && chars[i] == '*' && chars[i + 1] == '*' {
                 if let Some(end) = self.find_closing("**", &chars, i + 2) {
+                    let inner: String = chars[i + 2..end].iter().collect();
+                    let formatted_inner = self.format_inline(&inner);
                     result.push_str("\u{001b}[1m");
-                    result.extend(&chars[i + 2..end]);
+                    result.push_str(&formatted_inner);
                     result.push_str("\u{001b}[0m");
                     i = end + 2;
                     continue;
@@ -376,8 +378,10 @@ impl StreamingParser {
             // Check for *italic*
             if chars[i] == '*' {
                 if let Some(end) = self.find_closing("*", &chars, i + 1) {
+                    let inner: String = chars[i + 1..end].iter().collect();
+                    let formatted_inner = self.format_inline(&inner);
                     result.push_str("\u{001b}[3m");
-                    result.extend(&chars[i + 1..end]);
+                    result.push_str(&formatted_inner);
                     result.push_str("\u{001b}[0m");
                     i = end + 1;
                     continue;
@@ -398,8 +402,10 @@ impl StreamingParser {
             // Check for __bold__ (underscore variant)
             if i + 1 < chars.len() && chars[i] == '_' && chars[i + 1] == '_' {
                 if let Some(end) = self.find_closing("__", &chars, i + 2) {
+                    let inner: String = chars[i + 2..end].iter().collect();
+                    let formatted_inner = self.format_inline(&inner);
                     result.push_str("\u{001b}[1m");
-                    result.extend(&chars[i + 2..end]);
+                    result.push_str(&formatted_inner);
                     result.push_str("\u{001b}[0m");
                     i = end + 2;
                     continue;
@@ -409,8 +415,10 @@ impl StreamingParser {
             // Check for _italic_ (underscore variant)
             if chars[i] == '_' {
                 if let Some(end) = self.find_closing("_", &chars, i + 1) {
+                    let inner: String = chars[i + 1..end].iter().collect();
+                    let formatted_inner = self.format_inline(&inner);
                     result.push_str("\u{001b}[3m");
-                    result.extend(&chars[i + 1..end]);
+                    result.push_str(&formatted_inner);
                     result.push_str("\u{001b}[0m");
                     i = end + 1;
                     continue;

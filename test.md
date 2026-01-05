@@ -1,12 +1,8 @@
-## Usage
+### Test Categories
 
-```bash
-# Pipe markdown from a file
-cat document.md | mdstream
+Tests are organized in `tests/fixtures/`:
 
-# Pipe from echo
-echo "# Hello World" | mdstream
-
-# Redirect from file
-mdstream < document.md
-```
+1. **`blocks/`** - Individual block types (headings, paragraphs, code blocks, lists)
+2. **`streaming/`** - Incremental emission and block boundary detection
+3. **`ansi/`** - ANSI escape sequence formatting (bold, italic, colors)
+4. **`complex/`** - Real-world documents with mixed block types
