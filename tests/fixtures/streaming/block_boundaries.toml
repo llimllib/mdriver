@@ -3,7 +3,7 @@ description = "Test correct block boundary detection - different block types"
 
 [[chunks]]
 input = "# Heading\n"
-emit = "\u001b[1;34m# Heading\u001b[0m\n\n"
+emit = "\n\u001b[1;34m# Heading\u001b[0m\n\n"
 
 [[chunks]]
 input = "\n"

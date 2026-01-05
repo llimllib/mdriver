@@ -3,7 +3,7 @@ description = "Heading emits, then paragraph emits separately"
 
 [[chunks]]
 input = "# Title\n"
-emit = "\u001b[1;34m# Title\u001b[0m\n\n"
+emit = "\n\u001b[1;34m# Title\u001b[0m\n\n"
 
 [[chunks]]
 input = "\n"

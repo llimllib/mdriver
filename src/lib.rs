@@ -242,8 +242,8 @@ impl StreamingParser {
 
     fn format_heading(&self, level: usize, text: &str) -> String {
         let formatted_text = self.format_inline(text);
-        // Heading: blue and bold, with extra line break for spacing
-        format!("\u{001b}[1;34m{} {}\u{001b}[0m\n\n", "#".repeat(level), formatted_text)
+        // Heading: blue and bold, with line breaks before and after for spacing
+        format!("\n\u{001b}[1;34m{} {}\u{001b}[0m\n\n", "#".repeat(level), formatted_text)
     }
 
     fn format_paragraph(&self, lines: &[String]) -> String {
