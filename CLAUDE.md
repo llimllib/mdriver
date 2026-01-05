@@ -71,6 +71,65 @@ Common ANSI codes:
 - **Blue heading**: `\u001b[1;34m...\u001b[0m`
 - **Code background**: `\u001b[48;5;235m...\u001b[0m`
 
+## GitHub Flavored Markdown Specification
+
+**CRITICAL**: The authoritative specification for parsing behavior is in `gfmspec.md`.
+
+### When to Consult the Spec
+
+**Always reference `gfmspec.md` when**:
+- Implementing a new block type (headings, lists, code blocks, tables, etc.)
+- Implementing inline formatting (emphasis, links, code spans, etc.)
+- Handling edge cases or ambiguous input
+- Unsure about parsing precedence or rules
+- Debugging why a test expects certain output
+
+### How to Use the Spec
+
+The GFM spec is organized by feature. Use the Read tool to look up specific sections:
+
+**Block-level structures**:
+- ATX headings (lines starting with `#`)
+- Fenced code blocks (` ``` `)
+- Paragraphs and blank lines
+- Lists (ordered and unordered)
+- Block quotes
+- Tables
+- Thematic breaks
+
+**Inline structures**:
+- Emphasis and strong emphasis (`*` and `**`)
+- Code spans (`` ` ``)
+- Links and images
+- Autolinks
+- Strikethrough (GFM extension)
+
+**Examples from spec**:
+- Search for specific examples (e.g., "Example 32" in the spec)
+- Look at edge cases to understand boundary conditions
+- Check how nesting and precedence work
+
+### Parsing Strategy
+
+The spec describes the **final output** of parsing, not the algorithm. For our streaming parser:
+
+1. **Read the spec** to understand what output should look like
+2. **Design state machine** to detect when blocks complete
+3. **Implement incrementally** - our tests are based on spec behavior
+4. **Handle edge cases** as defined in spec examples
+
+### Important Spec Sections for Streaming
+
+**Block boundary detection** is key for streaming:
+- Blank lines often terminate blocks
+- Some blocks (code fences) need explicit closing
+- Some blocks (paragraphs) can be interrupted by other blocks
+- Understanding these rules is critical for knowing when to emit
+
+**Container blocks** (blockquotes, lists) can contain other blocks:
+- May need nested state tracking
+- Our initial implementation can skip these if too complex
+
 ## Architecture
 
 ### Core API
