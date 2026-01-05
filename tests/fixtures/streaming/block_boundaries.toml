@@ -19,7 +19,7 @@ emit = ""
 
 [[chunks]]
 input = "```\n"
-emit = "    \u001b[38;2;192;197;206mcode\n\n"
+emit = "    \u001b[38;2;192;197;206mcode\n\u001b[0m\n"
 
 [[chunks]]
 input = "\n"

@@ -13,6 +13,9 @@ The binary will be available at `target/release/mdstream`.
 ## Usage
 
 ```bash
+# Read from file
+mdstream README.md
+
 # Pipe markdown from a file
 cat document.md | mdstream
 
@@ -21,6 +24,18 @@ echo "# Hello World" | mdstream
 
 # Redirect from file
 mdstream < document.md
+
+# Use a specific syntax highlighting theme
+mdstream --theme "InspiredGitHub" README.md
+
+# Set default theme via environment variable
+MDSTREAM_THEME="Solarized (dark)" mdstream README.md
+
+# List available themes
+mdstream --list-themes
+
+# Show help
+mdstream --help
 ```
 
 ### Example
@@ -39,11 +54,50 @@ Output (with ANSI colors in your terminal):
 - ✅ **Streaming**: Renders markdown incrementally as it arrives
 - ✅ **ATX Headings**: `# Heading` with blue/bold formatting
 - ✅ **Paragraphs**: Text blocks with inline formatting
-- ✅ **Code Blocks**: Fenced blocks with ` ``` ` and gray background
+- ✅ **Code Blocks**: Fenced blocks with ` ``` ` and syntax highlighting
 - ✅ **Lists**: Unordered (`-`) and ordered (`1.`) lists
-- ✅ **Inline Formatting**: `**bold**`, `*italic*`, `` `code` ``
-- ✅ **ANSI Colors**: Beautiful terminal output
+- ✅ **Inline Formatting**: `**bold**`, `*italic*`, `` `code` `` with nested support
+- ✅ **Hyperlinks**: `[text](url)` converted to clickable OSC8 terminal links
+- ✅ **Syntax Highlighting**: 100+ languages supported with customizable themes
+- ✅ **ANSI Colors**: Beautiful terminal output with 24-bit true color
 - ✅ **Zero Warnings**: Strict clippy linting, no compiler warnings
+
+## Syntax Highlighting Themes
+
+mdstream uses the [syntect](https://github.com/trishume/syntect) library for syntax highlighting, supporting 100+ languages with customizable color themes.
+
+### Available Themes
+
+Use `mdstream --list-themes` to see all available themes. Popular options include:
+
+- **InspiredGitHub** - Bright, vibrant colors inspired by GitHub's syntax highlighting
+- **Solarized (dark)** - The classic Solarized dark color scheme
+- **Solarized (light)** - Solarized optimized for light backgrounds
+- **base16-ocean.dark** - Calm oceanic colors (default)
+- **base16-mocha.dark** - Warm mocha tones
+- **base16-eighties.dark** - Retro 80s aesthetic
+
+### Setting a Theme
+
+There are three ways to configure the theme (in order of precedence):
+
+1. **Command-line flag**: `mdstream --theme "InspiredGitHub" file.md`
+2. **Environment variable**: `export MDSTREAM_THEME="Solarized (dark)"`
+3. **Default**: `base16-ocean.dark`
+
+### Example
+
+```bash
+# Use InspiredGitHub theme
+mdstream --theme "InspiredGitHub" README.md
+
+# Set environment variable for persistent default
+export MDSTREAM_THEME="Solarized (dark)"
+mdstream README.md
+
+# Combine with piping
+MDSTREAM_THEME="base16-mocha.dark" cat file.md | mdstream
+```
 
 ## Conformance Test Suite
 
@@ -157,11 +211,10 @@ Example ANSI codes:
 Potential areas for expansion:
 
 1. Additional GFM features (tables, task lists, strikethrough)
-2. Syntax highlighting for code blocks (using the `info` field)
-3. Blockquotes and nested structures
-4. Terminal width awareness and text wrapping
-5. Performance benchmarks for large documents
-6. Additional inline formatting (links, images)
+2. Blockquotes and nested structures
+3. Terminal width awareness and text wrapping
+4. Performance benchmarks for large documents
+5. Image rendering using terminal graphics protocols
 
 ## Project Structure
 

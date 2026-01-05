@@ -1,33 +1,93 @@
 use mdstream::StreamingParser;
 use std::io::{self, Read};
 use std::env;
+use std::fs::File;
+
+fn print_help() {
+    println!("mdstream - Streaming Markdown Printer");
+    println!();
+    println!("USAGE:");
+    println!("    mdstream [OPTIONS] [FILE]");
+    println!();
+    println!("OPTIONS:");
+    println!("    --help              Print this help message");
+    println!("    --list-themes       List available syntax highlighting themes");
+    println!("    --theme <THEME>     Use specified syntax highlighting theme");
+    println!();
+    println!("ARGS:");
+    println!("    <FILE>              Markdown file to render (reads from stdin if not provided)");
+    println!();
+    println!("ENVIRONMENT:");
+    println!("    MDSTREAM_THEME      Default syntax highlighting theme (overridden by --theme)");
+    println!();
+    println!("EXAMPLES:");
+    println!("    mdstream README.md");
+    println!("    mdstream --theme \"Solarized (dark)\" README.md");
+    println!("    cat file.md | mdstream");
+    println!("    MDSTREAM_THEME=\"InspiredGitHub\" mdstream file.md");
+}
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
 
-    // Check for --list-themes flag
-    if args.len() > 1 && args[1] == "--list-themes" {
-        println!("Available syntax highlighting themes:");
-        for theme in StreamingParser::list_themes() {
-            println!("  {}", theme);
+    // Parse arguments
+    let mut theme: Option<String> = None;
+    let mut file_path: Option<String> = None;
+    let mut i = 1;
+
+    while i < args.len() {
+        match args[i].as_str() {
+            "--help" | "-h" => {
+                print_help();
+                return Ok(());
+            }
+            "--list-themes" => {
+                println!("Available syntax highlighting themes:");
+                for theme_name in StreamingParser::list_themes() {
+                    println!("  {}", theme_name);
+                }
+                return Ok(());
+            }
+            "--theme" => {
+                if i + 1 < args.len() {
+                    theme = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    eprintln!("Error: --theme requires a theme name");
+                    eprintln!("Run 'mdstream --help' for usage information");
+                    std::process::exit(1);
+                }
+            }
+            arg if !arg.starts_with('-') => {
+                file_path = Some(arg.to_string());
+                i += 1;
+            }
+            unknown => {
+                eprintln!("Error: Unknown option '{}'", unknown);
+                eprintln!("Run 'mdstream --help' for usage information");
+                std::process::exit(1);
+            }
         }
-        return Ok(());
     }
 
-    // Get theme from --theme parameter, environment variable, or use default
-    let theme = if args.len() > 2 && args[1] == "--theme" {
-        args[2].clone()
-    } else {
-        env::var("MDSTREAM_THEME").unwrap_or_else(|_| "base16-ocean.dark".to_string())
-    };
+    // Get theme from parameter, environment variable, or use default
+    let theme = theme
+        .or_else(|| env::var("MDSTREAM_THEME").ok())
+        .unwrap_or_else(|| "base16-ocean.dark".to_string());
 
     let mut parser = StreamingParser::with_theme(&theme);
     let mut buffer = [0u8; 4096];
-    let mut stdin = io::stdin();
 
-    // Read and process stdin in chunks
+    // Read from file or stdin
+    let mut reader: Box<dyn Read> = if let Some(path) = file_path {
+        Box::new(File::open(path)?)
+    } else {
+        Box::new(io::stdin())
+    };
+
+    // Read and process in chunks
     loop {
-        let bytes_read = stdin.read(&mut buffer)?;
+        let bytes_read = reader.read(&mut buffer)?;
         if bytes_read == 0 {
             break; // EOF
         }

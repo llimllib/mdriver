@@ -318,6 +318,9 @@ impl StreamingParser {
             output.push('\n');
         }
 
+        // Reset ANSI codes to prevent color bleeding
+        output.push_str("\u{001b}[0m");
+
         // Add blank line after code block for spacing
         output.push('\n');
         output
