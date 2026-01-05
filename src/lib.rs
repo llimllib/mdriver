@@ -297,21 +297,18 @@ impl StreamingParser {
 
         // Find the maximum display width (accounting for Unicode characters, excluding ANSI codes)
         let max_width = lines.iter()
-            .map(|l| {
-                let with_space = format!(" {}", l);
-                with_space.width()
-            })
+            .map(|l| l.width())
             .max()
-            .unwrap_or(1);
+            .unwrap_or(0);
 
-        // Each line: leading space + highlighted content + padding + background
+        // Each line: 4 space indent (no background) + background + content + padding
         for (i, line) in lines.iter().enumerate() {
-            let content_with_lead = format!(" {}", line);
-            let display_width = content_with_lead.width();
+            let display_width = line.width();
             let padding = max_width.saturating_sub(display_width);
 
-            // Apply background color, highlighted content, then padding
-            output.push_str("\u{001b}[48;5;235m ");
+            // 4 spaces indent without background, then apply background to content + padding
+            output.push_str("    ");
+            output.push_str("\u{001b}[48;5;235m");
             output.push_str(&highlighted_lines[i]);
             output.push_str(&" ".repeat(padding));
             output.push_str("\u{001b}[0m\n");

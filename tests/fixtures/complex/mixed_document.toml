@@ -47,4 +47,4 @@ emit = ""
 
 [[chunks]]
 input = "```\n"
-emit = "\u001b[48;5;235m \u001b[38;2;192;197;206mhello()\u001b[0m\n\n"
+emit = "    \u001b[48;5;235m\u001b[38;2;192;197;206mhello()\u001b[0m\n\n"
