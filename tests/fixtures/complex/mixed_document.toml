@@ -3,7 +3,7 @@ description = "Complex document with multiple block types streaming incrementall
 
 [[chunks]]
 input = "# README\n"
-emit = "\n\u001b[1;34m# README\u001b[0m\n\n"
+emit = "\u001b[1;34m# README\u001b[0m\n\n"
 
 [[chunks]]
 input = "\n"
@@ -11,11 +11,11 @@ emit = ""
 
 [[chunks]]
 input = "This is the introduction.\n\n"
-emit = "This is the introduction.\n"
+emit = "This is the introduction.\n\n"
 
 [[chunks]]
 input = "## Features\n"
-emit = "\n\u001b[1;34m## Features\u001b[0m\n\n"
+emit = "\u001b[1;34m## Features\u001b[0m\n\n"
 
 [[chunks]]
 input = "\n"
@@ -31,11 +31,11 @@ emit = ""
 
 [[chunks]]
 input = "\n"
-emit = "  • Fast\n  • Reliable\n"
+emit = "  • Fast\n  • Reliable\n\n"
 
 [[chunks]]
 input = "Example code:\n\n"
-emit = "Example code:\n"
+emit = "Example code:\n\n"
 
 [[chunks]]
 input = "```\n"
@@ -47,4 +47,4 @@ emit = ""
 
 [[chunks]]
 input = "```\n"
-emit = "\u001b[48;5;235m hello()\u001b[0m\n"
+emit = "\u001b[48;5;235m hello()\u001b[0m\n\n"

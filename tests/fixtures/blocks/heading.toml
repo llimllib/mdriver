@@ -15,4 +15,4 @@ emit = ""
 
 [[chunks]]
 input = "\n"
-emit = "\n\u001b[1;34m# Hello\u001b[0m\n\n"
+emit = "\u001b[1;34m# Hello\u001b[0m\n\n"

@@ -15,4 +15,4 @@ emit = ""
 
 [[chunks]]
 input = "\n"
-emit = "  • Item 1\n  • Item 2\n  • Item 3\n"
+emit = "  • Item 1\n  • Item 2\n  • Item 3\n\n"

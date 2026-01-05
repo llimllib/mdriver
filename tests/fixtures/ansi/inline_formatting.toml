@@ -3,4 +3,4 @@ description = "Test bold, italic, and inline code formatting with ANSI codes"
 
 [[chunks]]
 input = "This is **bold** and *italic* and `code`.\n\n"
-emit = "This is \u001b[1mbold\u001b[0m and \u001b[3mitalic\u001b[0m and \u001b[48;5;235m code \u001b[0m.\n"
+emit = "This is \u001b[1mbold\u001b[0m and \u001b[3mitalic\u001b[0m and \u001b[48;5;235m code \u001b[0m.\n\n"

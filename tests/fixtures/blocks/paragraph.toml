@@ -15,4 +15,4 @@ emit = ""
 
 [[chunks]]
 input = "\n"
-emit = "This is a paragraph.\n"
+emit = "This is a paragraph.\n\n"

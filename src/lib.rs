@@ -248,14 +248,14 @@ impl StreamingParser {
 
     fn format_heading(&self, level: usize, text: &str) -> String {
         let formatted_text = self.format_inline(text);
-        // Heading: blue and bold, with line breaks before and after for spacing
-        format!("\n\u{001b}[1;34m{} {}\u{001b}[0m\n\n", "#".repeat(level), formatted_text)
+        // Heading: blue and bold, with line break after for spacing
+        format!("\u{001b}[1;34m{} {}\u{001b}[0m\n\n", "#".repeat(level), formatted_text)
     }
 
     fn format_paragraph(&self, lines: &[String]) -> String {
         let text = lines.join(" ");
         let formatted_text = self.format_inline(&text);
-        format!("{}\n", formatted_text)
+        format!("{}\n\n", formatted_text)
     }
 
     fn format_code_block(&self, lines: &[String]) -> String {
@@ -278,6 +278,8 @@ impl StreamingParser {
             output.push_str(&format!("\u{001b}[48;5;235m{}{}\u{001b}[0m\n", content_with_lead, " ".repeat(padding)));
         }
 
+        // Add blank line after code block for spacing
+        output.push('\n');
         output
     }
 
@@ -296,6 +298,8 @@ impl StreamingParser {
             let formatted_content = self.format_inline(content);
             output.push_str(&format!("  • {}\n", formatted_content));
         }
+        // Add blank line after list for spacing
+        output.push('\n');
         output
     }
 
@@ -333,6 +337,28 @@ impl StreamingParser {
                     result.push_str("\u{001b}[48;5;235m ");
                     result.extend(&chars[i + 1..end]);
                     result.push_str(" \u{001b}[0m");
+                    i = end + 1;
+                    continue;
+                }
+            }
+
+            // Check for __bold__ (underscore variant)
+            if i + 1 < chars.len() && chars[i] == '_' && chars[i + 1] == '_' {
+                if let Some(end) = self.find_closing("__", &chars, i + 2) {
+                    result.push_str("\u{001b}[1m");
+                    result.extend(&chars[i + 2..end]);
+                    result.push_str("\u{001b}[0m");
+                    i = end + 2;
+                    continue;
+                }
+            }
+
+            // Check for _italic_ (underscore variant)
+            if chars[i] == '_' {
+                if let Some(end) = self.find_closing("_", &chars, i + 1) {
+                    result.push_str("\u{001b}[3m");
+                    result.extend(&chars[i + 1..end]);
+                    result.push_str("\u{001b}[0m");
                     i = end + 1;
                     continue;
                 }

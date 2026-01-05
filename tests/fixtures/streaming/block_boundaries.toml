@@ -3,7 +3,7 @@ description = "Test correct block boundary detection - different block types"
 
 [[chunks]]
 input = "# Heading\n"
-emit = "\n\u001b[1;34m# Heading\u001b[0m\n\n"
+emit = "\u001b[1;34m# Heading\u001b[0m\n\n"
 
 [[chunks]]
 input = "\n"
@@ -19,7 +19,7 @@ emit = ""
 
 [[chunks]]
 input = "```\n"
-emit = "\u001b[48;5;235m code\u001b[0m\n"
+emit = "\u001b[48;5;235m code\u001b[0m\n\n"
 
 [[chunks]]
 input = "\n"
@@ -27,4 +27,4 @@ emit = ""
 
 [[chunks]]
 input = "Paragraph after code.\n\n"
-emit = "Paragraph after code.\n"
+emit = "Paragraph after code.\n\n"
