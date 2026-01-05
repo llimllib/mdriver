@@ -1,7 +1,18 @@
 [package]
-name = "mdstream"
-version = "0.1.0"
+name = "mdriver"
+version = "0.2.0"
 edition = "2021"
+description = "Streaming markdown printer for the terminal with syntax highlighting"
+license = "MIT"
+repository = "https://github.com/llimllib/mdstream"
+readme = "README.md"
+keywords = ["markdown", "terminal", "cli", "streaming", "syntax-highlighting"]
+categories = ["command-line-utilities", "text-processing"]
+authors = ["Bill Mill <bill@billmill.org>"]
+
+[[bin]]
+name = "mdriver"
+path = "src/main.rs"
 
 [dependencies]
 syntect = "5.2"

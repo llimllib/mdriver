@@ -1,13 +1,13 @@
-use mdstream::StreamingParser;
+use mdriver::StreamingParser;
 use std::io::{self, Read};
 use std::env;
 use std::fs::File;
 
 fn print_help() {
-    println!("mdstream - Streaming Markdown Printer");
+    println!("mdriver - Streaming Markdown Printer");
     println!();
     println!("USAGE:");
-    println!("    mdstream [OPTIONS] [FILE]");
+    println!("    mdriver [OPTIONS] [FILE]");
     println!();
     println!("OPTIONS:");
     println!("    --help              Print this help message");
@@ -21,10 +21,10 @@ fn print_help() {
     println!("    MDSTREAM_THEME      Default syntax highlighting theme (overridden by --theme)");
     println!();
     println!("EXAMPLES:");
-    println!("    mdstream README.md");
-    println!("    mdstream --theme \"Solarized (dark)\" README.md");
-    println!("    cat file.md | mdstream");
-    println!("    MDSTREAM_THEME=\"InspiredGitHub\" mdstream file.md");
+    println!("    mdriver README.md");
+    println!("    mdriver --theme \"Solarized (dark)\" README.md");
+    println!("    cat file.md | mdriver");
+    println!("    MDSTREAM_THEME=\"InspiredGitHub\" mdriver file.md");
 }
 
 fn main() -> io::Result<()> {
@@ -54,7 +54,7 @@ fn main() -> io::Result<()> {
                     i += 2;
                 } else {
                     eprintln!("Error: --theme requires a theme name");
-                    eprintln!("Run 'mdstream --help' for usage information");
+                    eprintln!("Run 'mdriver --help' for usage information");
                     std::process::exit(1);
                 }
             }
@@ -64,7 +64,7 @@ fn main() -> io::Result<()> {
             }
             unknown => {
                 eprintln!("Error: Unknown option '{}'", unknown);
-                eprintln!("Run 'mdstream --help' for usage information");
+                eprintln!("Run 'mdriver --help' for usage information");
                 std::process::exit(1);
             }
         }

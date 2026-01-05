@@ -1,47 +1,73 @@
-# mdstream - Streaming Markdown Printer
+# mdriver - Streaming Markdown Printer
 
-A streaming markdown printer for the console that renders GitHub Flavored Markdown to the terminal with ANSI escape codes. The key feature is **incremental emission**: blocks are emitted immediately once parsed, not waiting for the entire document.
+[![CI](https://github.com/llimllib/mdstream/actions/workflows/ci.yml/badge.svg)](https://github.com/llimllib/mdstream/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/mdriver.svg)](https://crates.io/crates/mdriver)
+
+A streaming markdown printer for the terminal that renders GitHub Flavored Markdown with ANSI escape codes. The key feature is **incremental emission**: blocks are emitted immediately once parsed, not waiting for the entire document.
 
 ## Installation
 
+### From crates.io (Recommended)
+
 ```bash
+cargo install mdriver
+```
+
+### From Pre-built Binaries
+
+Download the latest release for your platform from the [GitHub Releases](https://github.com/llimllib/mdstream/releases) page:
+
+- **Linux**: `mdriver-x86_64-unknown-linux-gnu.tar.gz` or `mdriver-x86_64-unknown-linux-musl.tar.gz`
+- **macOS**: `mdriver-x86_64-apple-darwin.tar.gz` (Intel) or `mdriver-aarch64-apple-darwin.tar.gz` (Apple Silicon)
+
+Extract and add to your PATH:
+```bash
+tar xzf mdriver-*.tar.gz
+sudo mv mdriver /usr/local/bin/
+```
+
+### From Source
+
+```bash
+git clone https://github.com/llimllib/mdstream.git
+cd mdstream
 cargo build --release
 ```
 
-The binary will be available at `target/release/mdstream`.
+The binary will be available at `target/release/mdriver`.
 
 ## Usage
 
 ```bash
 # Read from file
-mdstream README.md
+mdriver README.md
 
 # Pipe markdown from a file
-cat document.md | mdstream
+cat document.md | mdriver
 
 # Pipe from echo
-echo "# Hello World" | mdstream
+echo "# Hello World" | mdriver
 
 # Redirect from file
-mdstream < document.md
+mdriver < document.md
 
 # Use a specific syntax highlighting theme
-mdstream --theme "InspiredGitHub" README.md
+mdriver --theme "InspiredGitHub" README.md
 
 # Set default theme via environment variable
-MDSTREAM_THEME="Solarized (dark)" mdstream README.md
+MDSTREAM_THEME="Solarized (dark)" mdriver README.md
 
 # List available themes
-mdstream --list-themes
+mdriver --list-themes
 
 # Show help
-mdstream --help
+mdriver --help
 ```
 
 ### Example
 
 ```bash
-$ echo "# Demo\n\nThis is **bold** and *italic*." | mdstream
+$ echo "# Demo\n\nThis is **bold** and *italic*." | mdriver
 ```
 
 Output (with ANSI colors in your terminal):
