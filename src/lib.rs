@@ -259,10 +259,17 @@ impl StreamingParser {
     fn format_code_block(&self, lines: &[String]) -> String {
         let mut output = String::new();
 
-        // Each line: leading space + content, no padding (ragged right edge)
+        // Find the maximum line length AFTER adding leading space
+        let max_len = lines.iter()
+            .map(|l| l.len() + 1)  // +1 for the leading space we'll add
+            .max()
+            .unwrap_or(1);
+
+        // Each line: leading space + content, pad to max_len for uniform width
         for line in lines {
             let content_with_lead = format!(" {}", line);
-            output.push_str(&format!("\u{001b}[48;5;235m{}\u{001b}[0m\n", content_with_lead));
+            let padding = max_len.saturating_sub(content_with_lead.len());
+            output.push_str(&format!("\u{001b}[48;5;235m{}{}\u{001b}[0m\n", content_with_lead, " ".repeat(padding)));
         }
 
         output

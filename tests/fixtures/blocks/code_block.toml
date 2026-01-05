@@ -27,4 +27,4 @@ emit = ""
 
 [[chunks]]
 input = "```\n"
-emit = "\u001b[48;5;235m fn main() {\u001b[0m\n\u001b[48;5;235m     println!(\"Hello\");\u001b[0m\n\u001b[48;5;235m }\u001b[0m\n"
+emit = "\u001b[48;5;235m fn main() {           \u001b[0m\n\u001b[48;5;235m     println!(\"Hello\");\u001b[0m\n\u001b[48;5;235m }                     \u001b[0m\n"
