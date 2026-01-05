@@ -286,8 +286,12 @@ impl StreamingParser {
         // Process lines and collect highlighted output
         let mut highlighted_lines = Vec::new();
         for line in lines {
-            let ranges = highlighter.highlight_line(line, &self.syntax_set).unwrap_or_default();
+            // Add newline for proper syntax highlighting state management
+            let line_with_newline = format!("{}\n", line);
+            let ranges = highlighter.highlight_line(&line_with_newline, &self.syntax_set).unwrap_or_default();
             let highlighted = as_24_bit_terminal_escaped(&ranges[..], false);
+            // Remove the trailing newline from highlighted output
+            let highlighted = highlighted.trim_end_matches('\n').to_string();
             highlighted_lines.push(highlighted);
         }
 
