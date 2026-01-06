@@ -1,0 +1,6 @@
+name = "strikethrough"
+description = "Test strikethrough formatting with ANSI codes"
+
+[[chunks]]
+input = "This is ~~deleted~~ text.\n\n"
+emit = "This is \u001b[9mdeleted\u001b[0m text.\n\n"

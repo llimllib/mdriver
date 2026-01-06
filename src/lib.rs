@@ -844,6 +844,19 @@ impl StreamingParser {
                 }
             }
 
+            // Check for ~~strikethrough~~
+            if i + 1 < chars.len() && chars[i] == '~' && chars[i + 1] == '~' {
+                if let Some(end) = self.find_closing("~~", &chars, i + 2) {
+                    let inner: String = chars[i + 2..end].iter().collect();
+                    let formatted_inner = self.format_inline(&inner);
+                    result.push_str("\u{001b}[9m");
+                    result.push_str(&formatted_inner);
+                    result.push_str("\u{001b}[0m");
+                    i = end + 2;
+                    continue;
+                }
+            }
+
             // Check for **bold**
             if i + 1 < chars.len() && chars[i] == '*' && chars[i + 1] == '*' {
                 if let Some(end) = self.find_closing("**", &chars, i + 2) {

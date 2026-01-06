@@ -1,0 +1,6 @@
+name = "strikethrough-nested"
+description = "Test strikethrough with nested formatting"
+
+[[chunks]]
+input = "This is ~~**bold deleted**~~ and ~~*italic deleted*~~ text.\n\n"
+emit = "This is \u001b[9m\u001b[1mbold deleted\u001b[0m\u001b[0m and \u001b[9m\u001b[3mitalic deleted\u001b[0m\u001b[0m text.\n\n"
