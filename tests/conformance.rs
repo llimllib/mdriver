@@ -1,6 +1,6 @@
 mod common;
 
-use common::{ConformanceTest};
+use common::ConformanceTest;
 use mdriver::StreamingParser;
 use std::path::PathBuf;
 

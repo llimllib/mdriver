@@ -1,6 +1,6 @@
-use syntect::parsing::SyntaxSet;
-use syntect::highlighting::ThemeSet;
 use syntect::easy::HighlightLines;
+use syntect::highlighting::ThemeSet;
+use syntect::parsing::SyntaxSet;
 use syntect::util::as_24_bit_terminal_escaped;
 
 /// Column alignment in tables
@@ -33,13 +33,17 @@ enum ParserState {
 #[derive(Debug, Clone)]
 enum BlockBuilder {
     None,
-    Paragraph { lines: Vec<String> },
+    Paragraph {
+        lines: Vec<String>,
+    },
     CodeBlock {
         lines: Vec<String>,
         #[allow(dead_code)]
-        info: String,  // Language info for future syntax highlighting
+        info: String, // Language info for future syntax highlighting
     },
-    List { items: Vec<String> },
+    List {
+        items: Vec<String>,
+    },
     Table {
         header: Vec<String>,
         alignments: Vec<Alignment>,
@@ -146,21 +150,31 @@ impl StreamingParser {
 
         // Check for code fence (```)
         if let Some((info, fence)) = self.parse_code_fence(trimmed) {
-            self.state = ParserState::InCodeBlock { info: info.clone(), fence: fence.clone() };
-            self.current_block = BlockBuilder::CodeBlock { lines: Vec::new(), info };
+            self.state = ParserState::InCodeBlock {
+                info: info.clone(),
+                fence: fence.clone(),
+            };
+            self.current_block = BlockBuilder::CodeBlock {
+                lines: Vec::new(),
+                info,
+            };
             return None;
         }
 
         // Check for list item (- or digit.)
         if self.is_list_item(trimmed) {
             self.state = ParserState::InList;
-            self.current_block = BlockBuilder::List { items: vec![trimmed.to_string()] };
+            self.current_block = BlockBuilder::List {
+                items: vec![trimmed.to_string()],
+            };
             return None;
         }
 
         // Otherwise, start a paragraph
         self.state = ParserState::InParagraph;
-        self.current_block = BlockBuilder::Paragraph { lines: vec![trimmed.to_string()] };
+        self.current_block = BlockBuilder::Paragraph {
+            lines: vec![trimmed.to_string()],
+        };
         None
     }
 
@@ -186,7 +200,7 @@ impl StreamingParser {
                     rows: Vec::new(),
                 };
                 self.state = ParserState::InTable;
-                return None;  // No emission yet
+                return None; // No emission yet
             }
         }
 
@@ -333,16 +347,22 @@ impl StreamingParser {
             BlockBuilder::Paragraph { lines } => Some(self.format_paragraph(&lines)),
             BlockBuilder::CodeBlock { lines, info } => Some(self.format_code_block(&lines, &info)),
             BlockBuilder::List { items } => Some(self.format_list(&items)),
-            BlockBuilder::Table { header, alignments, rows } => {
-                Some(self.format_table(&header, &alignments, &rows))
-            }
+            BlockBuilder::Table {
+                header,
+                alignments,
+                rows,
+            } => Some(self.format_table(&header, &alignments, &rows)),
         }
     }
 
     fn format_heading(&self, level: usize, text: &str) -> String {
         let formatted_text = self.format_inline(text);
         // Heading: blue and bold, with line break after for spacing
-        format!("\u{001b}[1;34m{} {}\u{001b}[0m\n\n", "#".repeat(level), formatted_text)
+        format!(
+            "\u{001b}[1;34m{} {}\u{001b}[0m\n\n",
+            "#".repeat(level),
+            formatted_text
+        )
     }
 
     fn format_paragraph(&self, lines: &[String]) -> String {
@@ -355,11 +375,15 @@ impl StreamingParser {
         let mut output = String::new();
 
         // Try to find syntax definition for the language
-        let syntax = self.syntax_set
+        let syntax = self
+            .syntax_set
             .find_syntax_by_token(info)
             .unwrap_or_else(|| self.syntax_set.find_syntax_plain_text());
 
-        let theme = self.theme_set.themes.get(&self.theme_name)
+        let theme = self
+            .theme_set
+            .themes
+            .get(&self.theme_name)
             .or_else(|| self.theme_set.themes.get("base16-ocean.dark"))
             .expect("Failed to load syntax highlighting theme");
         let mut highlighter = HighlightLines::new(syntax, theme);
@@ -369,7 +393,9 @@ impl StreamingParser {
         for line in lines {
             // Add newline for proper syntax highlighting state management
             let line_with_newline = format!("{}\n", line);
-            let ranges = highlighter.highlight_line(&line_with_newline, &self.syntax_set).unwrap_or_default();
+            let ranges = highlighter
+                .highlight_line(&line_with_newline, &self.syntax_set)
+                .unwrap_or_default();
             let highlighted = as_24_bit_terminal_escaped(&ranges[..], false);
             // Remove the trailing newline from highlighted output
             let highlighted = highlighted.trim_end_matches('\n').to_string();
@@ -420,7 +446,8 @@ impl StreamingParser {
         }
 
         // Split by pipes, check each cell
-        let cells: Vec<&str> = line.split('|')
+        let cells: Vec<&str> = line
+            .split('|')
             .map(|s| s.trim())
             .filter(|s| !s.is_empty())
             .collect();
@@ -440,11 +467,11 @@ impl StreamingParser {
             let ends_colon = chars[chars.len() - 1] == ':';
 
             let dash_section = if starts_colon && ends_colon {
-                &chars[1..chars.len()-1]
+                &chars[1..chars.len() - 1]
             } else if starts_colon {
                 &chars[1..]
             } else if ends_colon {
-                &chars[..chars.len()-1]
+                &chars[..chars.len() - 1]
             } else {
                 &chars[..]
             };
@@ -492,7 +519,7 @@ impl StreamingParser {
         if !cells.is_empty() && cells[0].is_empty() {
             cells.remove(0);
         }
-        if !cells.is_empty() && cells[cells.len()-1].is_empty() {
+        if !cells.is_empty() && cells[cells.len() - 1].is_empty() {
             cells.pop();
         }
 
@@ -502,17 +529,20 @@ impl StreamingParser {
     fn parse_alignments(&self, delimiter_row: &str) -> Vec<Alignment> {
         let cells = self.parse_table_row(delimiter_row);
 
-        cells.iter().map(|cell| {
-            let trimmed = cell.trim();
-            let starts_colon = trimmed.starts_with(':');
-            let ends_colon = trimmed.ends_with(':');
+        cells
+            .iter()
+            .map(|cell| {
+                let trimmed = cell.trim();
+                let starts_colon = trimmed.starts_with(':');
+                let ends_colon = trimmed.ends_with(':');
 
-            match (starts_colon, ends_colon) {
-                (true, true) => Alignment::Center,
-                (false, true) => Alignment::Right,
-                _ => Alignment::Left,
-            }
-        }).collect()
+                match (starts_colon, ends_colon) {
+                    (true, true) => Alignment::Center,
+                    (false, true) => Alignment::Right,
+                    _ => Alignment::Left,
+                }
+            })
+            .collect()
     }
 
     fn strip_ansi(&self, text: &str) -> String {
@@ -554,7 +584,12 @@ impl StreamingParser {
             Alignment::Center => {
                 let left_pad = padding / 2;
                 let right_pad = padding - left_pad;
-                format!("{}{}{}", " ".repeat(left_pad), content, " ".repeat(right_pad))
+                format!(
+                    "{}{}{}",
+                    " ".repeat(left_pad),
+                    content,
+                    " ".repeat(right_pad)
+                )
             }
         }
     }
@@ -563,14 +598,14 @@ impl StreamingParser {
         &self,
         header: &[String],
         alignments: &[Alignment],
-        rows: &[Vec<String>]
+        rows: &[Vec<String>],
     ) -> String {
         let mut output = String::new();
 
         // Calculate column widths
-        let num_cols = header.len().max(
-            rows.iter().map(|r| r.len()).max().unwrap_or(0)
-        );
+        let num_cols = header
+            .len()
+            .max(rows.iter().map(|r| r.len()).max().unwrap_or(0));
 
         let mut col_widths = vec![0; num_cols];
 
@@ -608,7 +643,11 @@ impl StreamingParser {
         output.push('│');
         for (i, cell) in header.iter().enumerate() {
             let formatted = self.format_inline(cell);
-            let aligned = self.align_cell(&formatted, col_widths[i], alignments.get(i).copied().unwrap_or(Alignment::Left));
+            let aligned = self.align_cell(
+                &formatted,
+                col_widths[i],
+                alignments.get(i).copied().unwrap_or(Alignment::Left),
+            );
             output.push_str(&format!(" {} │", aligned));
         }
         output.push('\n');
@@ -629,7 +668,11 @@ impl StreamingParser {
             for (i, &width) in col_widths.iter().enumerate().take(num_cols) {
                 let cell = row.get(i).map(|s| s.as_str()).unwrap_or("");
                 let formatted = self.format_inline(cell);
-                let aligned = self.align_cell(&formatted, width, alignments.get(i).copied().unwrap_or(Alignment::Left));
+                let aligned = self.align_cell(
+                    &formatted,
+                    width,
+                    alignments.get(i).copied().unwrap_or(Alignment::Left),
+                );
                 output.push_str(&format!(" {} │", aligned));
             }
             output.push('\n');

@@ -22,20 +22,26 @@ This is useful for real-time rendering of markdown as it's typed or received ove
 
 ### Mandatory Checks Before Committing
 
-1. **No Compiler Warnings**
+1. **Code Formatting**
+   ```bash
+   cargo fmt
+   ```
+   Must be run before committing. The CI checks that code is properly formatted with `cargo fmt -- --check`.
+
+2. **No Compiler Warnings**
    ```bash
    cargo build
    cargo build --release
    ```
    Must complete with zero warnings. If warnings appear, fix them immediately.
 
-2. **No Clippy Errors**
+3. **No Clippy Errors**
    ```bash
    cargo clippy --all-targets --all-features -- -D warnings
    ```
    Must pass with zero errors. Clippy runs with `-D warnings` which treats warnings as errors.
 
-3. **All Tests Pass**
+4. **All Tests Pass**
    ```bash
    cargo test
    ```
@@ -55,7 +61,7 @@ Only use `#[allow(...)]` when:
 - Code is intentionally kept for future features (e.g., `info` field for syntax highlighting)
 - The lint is a false positive (rare, document why)
 
-**Never commit code with warnings or clippy errors.**
+**Never commit code without running `cargo fmt`, or with warnings or clippy errors.**
 
 ## Test-Driven Development Approach
 

@@ -282,6 +282,7 @@ This project maintains strict code quality requirements:
 
 ```bash
 # All must pass before committing:
+cargo fmt                                                # Format code
 cargo build                                              # No warnings
 cargo build --release                                    # No warnings
 cargo clippy --all-targets --all-features -- -D warnings # No errors

@@ -1,7 +1,7 @@
 use mdriver::StreamingParser;
-use std::io::{self, Read};
 use std::env;
 use std::fs::File;
+use std::io::{self, Read};
 
 fn print_help() {
     println!("mdriver - Streaming Markdown Printer");
