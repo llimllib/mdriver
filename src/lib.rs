@@ -1041,7 +1041,7 @@ impl StreamingParser {
     }
 
     fn parse_link(&self, chars: &[char], start: usize) -> Option<LinkData> {
-        // Looking for [text](url)
+        // Looking for [text](url) or [text](url "title")
         // start points to '['
 
         // Find closing ]
@@ -1055,9 +1055,31 @@ impl StreamingParser {
         // Find closing )
         let url_end = self.find_closing(")", chars, text_end + 2)?;
 
-        // Extract text and url
+        // Extract text
         let text: String = chars[start + 1..text_end].iter().collect();
-        let url: String = chars[text_end + 2..url_end].iter().collect();
+
+        // Parse the content between ( and )
+        let link_content: String = chars[text_end + 2..url_end].iter().collect();
+        let link_content = link_content.trim();
+
+        // Split URL and optional title
+        // Title is separated by whitespace and enclosed in quotes or parentheses
+        let url = if let Some(space_pos) = link_content.find(|c: char| c.is_whitespace()) {
+            // There's whitespace, so there might be a title
+            let url_part = link_content[..space_pos].trim();
+            let after_url = link_content[space_pos..].trim();
+
+            // Check if there's a title (starts with ", ', or ()
+            if after_url.is_empty() {
+                url_part.to_string()
+            } else {
+                // Title exists, just use the URL part
+                url_part.to_string()
+            }
+        } else {
+            // No whitespace, entire content is the URL
+            link_content.to_string()
+        };
 
         Some(LinkData {
             text,

@@ -1,0 +1,6 @@
+name = "hyperlinks-with-title"
+description = "Links with titles should ignore the title part"
+
+[[chunks]]
+input = "[Link](https://example.com \"Example Site\")\n\n"
+emit = "\u001b]8;;https://example.com\u001b\\Link\u001b]8;;\u001b\\\n\n"
