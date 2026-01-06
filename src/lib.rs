@@ -210,6 +210,17 @@ impl StreamingParser {
             return self.emit_current_block();
         }
 
+        // Check if this is a setext heading underline
+        if let Some(level) = self.parse_setext_underline(trimmed) {
+            if let BlockBuilder::Paragraph { lines } = &self.current_block {
+                // Join all lines to form the heading text
+                let text = lines.join(" ");
+                self.state = ParserState::Ready;
+                self.current_block = BlockBuilder::None;
+                return Some(self.format_heading(level, &text));
+            }
+        }
+
         // Check if this might be a table delimiter row
         if let BlockBuilder::Paragraph { lines } = &self.current_block {
             if lines.len() == 1 && self.is_table_delimiter_row(trimmed) {
@@ -369,6 +380,29 @@ impl StreamingParser {
                 return None;
             }
         }
+        None
+    }
+
+    fn parse_setext_underline(&self, line: &str) -> Option<usize> {
+        // Setext underline: 0-3 spaces, then sequence of = or -, with trailing spaces allowed
+        let leading_spaces = line.len() - line.trim_start().len();
+
+        if leading_spaces > 3 {
+            return None;
+        }
+
+        let trimmed = line.trim();
+
+        // Check for all = (level 1)
+        if !trimmed.is_empty() && trimmed.chars().all(|c| c == '=') {
+            return Some(1);
+        }
+
+        // Check for all - (level 2)
+        if !trimmed.is_empty() && trimmed.chars().all(|c| c == '-') {
+            return Some(2);
+        }
+
         None
     }
 

@@ -1,0 +1,14 @@
+name = "heading-setext-multiline"
+description = "Setext heading with multiple lines of text"
+
+[[chunks]]
+input = "First line\n"
+emit = ""
+
+[[chunks]]
+input = "Second line\n"
+emit = ""
+
+[[chunks]]
+input = "===========\n"
+emit = "\u001b[1;34m# First line Second line\u001b[0m\n\n"
