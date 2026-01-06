@@ -506,8 +506,33 @@ impl StreamingParser {
     }
 
     fn format_paragraph(&self, lines: &[String]) -> String {
-        let text = lines.join(" ");
-        let formatted_text = self.format_inline(&text);
+        let mut result = String::new();
+
+        for (i, line) in lines.iter().enumerate() {
+            // Check for hard line break: 2+ trailing spaces or trailing backslash
+            let has_hard_break = line.ends_with("  ")
+                || line.ends_with("   ")
+                || line.ends_with("    ")
+                || line.ends_with('\\');
+
+            // Remove trailing spaces/backslash for formatting
+            let trimmed = if line.ends_with('\\') {
+                &line[..line.len() - 1]
+            } else {
+                line.trim_end()
+            };
+
+            result.push_str(trimmed);
+
+            // Add line break or space depending on hard break
+            if has_hard_break && i < lines.len() - 1 {
+                result.push('\n');
+            } else if i < lines.len() - 1 {
+                result.push(' ');
+            }
+        }
+
+        let formatted_text = self.format_inline(&result);
         format!("{}\n\n", formatted_text)
     }
 
