@@ -18,6 +18,21 @@ enum ListItemType {
     Ordered,
 }
 
+/// Image protocol for rendering images
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ImageProtocol {
+    None,
+    Kitty,
+}
+
+/// Image data parsed from markdown
+#[derive(Debug)]
+struct ImageData {
+    alt: String,
+    src: String,
+    end_pos: usize,
+}
+
 /// Streaming markdown parser that emits formatted blocks incrementally
 pub struct StreamingParser {
     buffer: String,
@@ -26,6 +41,7 @@ pub struct StreamingParser {
     syntax_set: SyntaxSet,
     theme_set: ThemeSet,
     theme_name: String,
+    image_protocol: ImageProtocol,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -71,11 +87,11 @@ struct LinkData {
 
 impl StreamingParser {
     pub fn new() -> Self {
-        Self::with_theme("base16-ocean.dark")
+        Self::with_theme("base16-ocean.dark", ImageProtocol::None)
     }
 
     /// Create a new parser with a specific syntax highlighting theme
-    pub fn with_theme(theme_name: &str) -> Self {
+    pub fn with_theme(theme_name: &str, image_protocol: ImageProtocol) -> Self {
         Self {
             buffer: String::new(),
             state: ParserState::Ready,
@@ -83,6 +99,7 @@ impl StreamingParser {
             syntax_set: SyntaxSet::load_defaults_newlines(),
             theme_set: ThemeSet::load_defaults(),
             theme_name: theme_name.to_string(),
+            image_protocol,
         }
     }
 
@@ -943,6 +960,15 @@ impl StreamingParser {
         let mut i = 0;
 
         while i < chars.len() {
+            // Check for ![alt](src) images
+            if chars[i] == '!' {
+                if let Some(img) = self.parse_image(&chars, i) {
+                    result.push_str(&self.render_image(&img.alt, &img.src));
+                    i = img.end_pos;
+                    continue;
+                }
+            }
+
             // Check for [text](url) hyperlinks
             if chars[i] == '[' {
                 if let Some(link) = self.parse_link(&chars, i) {
@@ -1040,6 +1066,100 @@ impl StreamingParser {
         result
     }
 
+    fn render_image(&self, alt: &str, src: &str) -> String {
+        match self.image_protocol {
+            ImageProtocol::None => format!("![{}]({})", alt, src),
+            ImageProtocol::Kitty => {
+                // Load image data (local file or HTTP)
+                match self.load_image_data(src) {
+                    Ok(data) => {
+                        // Process and render
+                        match self.process_image(&data) {
+                            Ok(kitty_output) => kitty_output,
+                            Err(_) => alt.to_string(), // Fallback to alt text
+                        }
+                    }
+                    Err(_) => alt.to_string(), // Fallback to alt text
+                }
+            }
+        }
+    }
+
+    fn load_image_data(&self, src: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        if src.starts_with("http://") || src.starts_with("https://") {
+            // Fetch remote image
+            let response = ureq::get(src).call()?;
+            let mut bytes = Vec::new();
+            std::io::Read::read_to_end(&mut response.into_reader(), &mut bytes)?;
+            Ok(bytes)
+        } else {
+            // Load local file
+            std::fs::read(src).map_err(|e| e.into())
+        }
+    }
+
+    fn process_image(&self, data: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+        use image::ImageReader;
+        use std::io::Cursor;
+
+        // Decode image
+        let img = ImageReader::new(Cursor::new(data))
+            .with_guessed_format()?
+            .decode()?;
+
+        // Get terminal width (assume 80 if can't determine)
+        let term_width = term_size::dimensions().map(|(w, _)| w).unwrap_or(80);
+
+        // Resize to terminal width, preserve aspect ratio
+        let resized = if img.width() > term_width as u32 {
+            img.resize(
+                term_width as u32,
+                u32::MAX,
+                image::imageops::FilterType::Lanczos3,
+            )
+        } else {
+            img
+        };
+
+        // Re-encode as PNG
+        let mut png_data = Vec::new();
+        resized.write_to(&mut Cursor::new(&mut png_data), image::ImageFormat::Png)?;
+
+        // Render using kitty protocol
+        Ok(self.render_kitty_image(&png_data))
+    }
+
+    fn render_kitty_image(&self, png_data: &[u8]) -> String {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+        let encoded = STANDARD.encode(png_data);
+        let chunk_size = 4096;
+        let mut output = String::new();
+
+        let chunks: Vec<&str> = encoded
+            .as_bytes()
+            .chunks(chunk_size)
+            .map(|chunk| std::str::from_utf8(chunk).unwrap())
+            .collect();
+
+        for (i, chunk) in chunks.iter().enumerate() {
+            let is_last = i == chunks.len() - 1;
+            let m = if is_last { 0 } else { 1 };
+
+            if i == 0 {
+                // First chunk: include format and transmission parameters
+                output.push_str(&format!("\x1b_Gf=100,a=T,m={};{}\x1b\\", m, chunk));
+            } else {
+                // Continuation chunks
+                output.push_str(&format!("\x1b_Gm={};{}\x1b\\", m, chunk));
+            }
+        }
+
+        // Add newline after image
+        output.push('\n');
+        output
+    }
+
     fn parse_link(&self, chars: &[char], start: usize) -> Option<LinkData> {
         // Looking for [text](url) or [text](url "title")
         // start points to '['
@@ -1084,6 +1204,50 @@ impl StreamingParser {
         Some(LinkData {
             text,
             url,
+            end_pos: url_end + 1,
+        })
+    }
+
+    fn parse_image(&self, chars: &[char], start: usize) -> Option<ImageData> {
+        // Looking for ![alt](src) or ![alt](src "title")
+        // start points to '!'
+
+        // Must start with ![
+        if start + 1 >= chars.len() || chars[start] != '!' || chars[start + 1] != '[' {
+            return None;
+        }
+
+        // Find closing ]
+        let text_end = self.find_closing("]", chars, start + 2)?;
+
+        // Check if followed by (
+        if text_end + 1 >= chars.len() || chars[text_end + 1] != '(' {
+            return None;
+        }
+
+        // Find closing )
+        let url_end = self.find_closing(")", chars, text_end + 2)?;
+
+        // Extract alt text
+        let alt: String = chars[start + 2..text_end].iter().collect();
+
+        // Parse the content between ( and )
+        let src_content: String = chars[text_end + 2..url_end].iter().collect();
+        let src_content = src_content.trim();
+
+        // Strip optional title from src (e.g., "url "title"")
+        let src = if let Some(space_pos) = src_content.find(|c: char| c.is_whitespace()) {
+            // There's whitespace, so there might be a title
+            let src_part = src_content[..space_pos].trim();
+            src_part.to_string()
+        } else {
+            // No whitespace, entire content is the src
+            src_content.to_string()
+        };
+
+        Some(ImageData {
+            alt,
+            src,
             end_pos: url_end + 1,
         })
     }

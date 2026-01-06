@@ -60,6 +60,9 @@ MDRIVER_THEME="Solarized (dark)" mdriver README.md
 # List available themes
 mdriver --list-themes
 
+# Render images using kitty graphics protocol
+mdriver --images kitty document.md
+
 # Show help
 mdriver --help
 ```
@@ -84,6 +87,7 @@ Output (with ANSI colors in your terminal):
 - ✅ **Lists**: Unordered (`-`) and ordered (`1.`) lists
 - ✅ **Inline Formatting**: `**bold**`, `*italic*`, `` `code` `` with nested support
 - ✅ **Hyperlinks**: `[text](url)` converted to clickable OSC8 terminal links
+- ✅ **Image Rendering**: `![alt](src)` with kitty graphics protocol support
 - ✅ **Syntax Highlighting**: 100+ languages supported with customizable themes
 - ✅ **ANSI Colors**: Beautiful terminal output with 24-bit true color
 - ✅ **Zero Warnings**: Strict clippy linting, no compiler warnings
@@ -124,6 +128,54 @@ mdriver README.md
 # Combine with piping
 MDRIVER_THEME="base16-mocha.dark" cat file.md | mdriver
 ```
+
+## Image Rendering
+
+mdriver can render images inline in your terminal using the [kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). This feature works with any terminal that supports the kitty graphics protocol (kitty, WezTerm, Ghostty, etc.).
+
+### Enabling Image Rendering
+
+Use the `--images kitty` flag to enable image display:
+
+```bash
+# Render local images
+mdriver --images kitty document.md
+
+# Works with remote URLs
+echo "![Logo](https://example.com/logo.png)" | mdriver --images kitty
+
+# Combine with theme selection
+mdriver --theme "InspiredGitHub" --images kitty README.md
+```
+
+### Image Features
+
+- **Auto-resize**: Images automatically resize to fit terminal width while preserving aspect ratio
+- **Remote URLs**: Fetches and displays images from HTTP/HTTPS URLs
+- **Graceful fallback**: Shows alt text when image fails to load
+- **Backward compatible**: Without `--images` flag, images render as plain text `![alt](src)`
+- **Extensible**: Architecture supports future protocols (sixel, iTerm2, etc.)
+
+### Example
+
+```markdown
+# My Document
+
+Here's a screenshot:
+
+![Screenshot](./screenshot.png)
+
+And a remote image:
+
+![Logo](https://example.com/logo.png)
+```
+
+```bash
+# Render with images
+mdriver --images kitty document.md
+```
+
+**Note**: Image rendering requires a terminal that supports the kitty graphics protocol. In terminals without support, images will display as alt text.
 
 ## Conformance Test Suite
 
@@ -236,11 +288,10 @@ Example ANSI codes:
 
 Potential areas for expansion:
 
-1. Additional GFM features (tables, task lists, strikethrough)
-2. Blockquotes and nested structures
+1. Additional GFM features (tables, task lists)
+2. Additional image protocols (sixel, iTerm2)
 3. Terminal width awareness and text wrapping
 4. Performance benchmarks for large documents
-5. Image rendering using terminal graphics protocols
 
 ## Project Structure
 

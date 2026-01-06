@@ -13,6 +13,7 @@ fn print_help() {
     println!("    --help              Print this help message");
     println!("    --list-themes       List available syntax highlighting themes");
     println!("    --theme <THEME>     Use specified syntax highlighting theme");
+    println!("    --images <PROTOCOL> Enable image rendering (protocols: kitty)");
     println!();
     println!("ARGS:");
     println!("    <FILE>              Markdown file to render (reads from stdin if not provided)");
@@ -23,6 +24,7 @@ fn print_help() {
     println!("EXAMPLES:");
     println!("    mdriver README.md");
     println!("    mdriver --theme \"Solarized (dark)\" README.md");
+    println!("    mdriver --images kitty document.md");
     println!("    cat file.md | mdriver");
     println!("    MDRIVER_THEME=\"InspiredGitHub\" mdriver file.md");
 }
@@ -32,6 +34,7 @@ fn main() -> io::Result<()> {
 
     // Parse arguments
     let mut theme: Option<String> = None;
+    let mut image_protocol = mdriver::ImageProtocol::None;
     let mut file_path: Option<String> = None;
     let mut i = 1;
 
@@ -58,6 +61,24 @@ fn main() -> io::Result<()> {
                     std::process::exit(1);
                 }
             }
+            "--images" => {
+                if i + 1 < args.len() {
+                    match args[i + 1].as_str() {
+                        "kitty" => image_protocol = mdriver::ImageProtocol::Kitty,
+                        protocol => {
+                            eprintln!("Error: Unknown image protocol '{}'", protocol);
+                            eprintln!("Supported protocols: kitty");
+                            eprintln!("Run 'mdriver --help' for usage information");
+                            std::process::exit(1);
+                        }
+                    }
+                    i += 2;
+                } else {
+                    eprintln!("Error: --images requires a protocol name");
+                    eprintln!("Run 'mdriver --help' for usage information");
+                    std::process::exit(1);
+                }
+            }
             arg if !arg.starts_with('-') => {
                 file_path = Some(arg.to_string());
                 i += 1;
@@ -75,7 +96,7 @@ fn main() -> io::Result<()> {
         .or_else(|| env::var("MDRIVER_THEME").ok())
         .unwrap_or_else(|| "base16-ocean.dark".to_string());
 
-    let mut parser = StreamingParser::with_theme(&theme);
+    let mut parser = StreamingParser::with_theme(&theme, image_protocol);
     let mut buffer = [0u8; 4096];
 
     // Read from file or stdin
