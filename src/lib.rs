@@ -766,10 +766,17 @@ impl StreamingParser {
     fn format_code_block(&self, lines: &[String], info: &str) -> String {
         let mut output = String::new();
 
+        // Map common aliases to their syntect language names
+        let language = match info.to_lowercase().as_str() {
+            "jsx" => "javascript",
+            "tsx" => "typescript",
+            _ => info,
+        };
+
         // Try to find syntax definition for the language
         let syntax = self
             .syntax_set
-            .find_syntax_by_token(info)
+            .find_syntax_by_token(language)
             .unwrap_or_else(|| self.syntax_set.find_syntax_plain_text());
 
         let theme = self
