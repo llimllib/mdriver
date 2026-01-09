@@ -15,6 +15,7 @@ name = "mdriver"
 path = "src/main.rs"
 
 [dependencies]
+two-face = "0.5.1"
 syntect = "5.2"
 ureq = "2.9"
 image = "0.25"

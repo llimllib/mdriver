@@ -1,7 +1,12 @@
+use std::sync::LazyLock;
+
 use syntect::easy::HighlightLines;
-use syntect::highlighting::ThemeSet;
 use syntect::parsing::SyntaxSet;
 use syntect::util::as_24_bit_terminal_escaped;
+use two_face::theme::{EmbeddedLazyThemeSet, EmbeddedThemeName};
+
+// Static theme set using two-face's extended themes
+static THEME_SET: LazyLock<EmbeddedLazyThemeSet> = LazyLock::new(two_face::theme::extra);
 
 /// Column alignment in tables
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -39,7 +44,7 @@ pub struct StreamingParser {
     state: ParserState,
     current_block: BlockBuilder,
     syntax_set: SyntaxSet,
-    theme_set: ThemeSet,
+    theme_set: &'static EmbeddedLazyThemeSet,
     theme_name: String,
     image_protocol: ImageProtocol,
 }
@@ -56,7 +61,9 @@ enum ParserState {
     InList,
     InListAfterBlank, // In a list but just saw a blank line
     InTable,
-    InBlockquote { nesting_level: usize },
+    InBlockquote {
+        nesting_level: usize,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -101,8 +108,8 @@ impl StreamingParser {
             buffer: String::new(),
             state: ParserState::Ready,
             current_block: BlockBuilder::None,
-            syntax_set: SyntaxSet::load_defaults_newlines(),
-            theme_set: ThemeSet::load_defaults(),
+            syntax_set: two_face::syntax::extra_newlines(),
+            theme_set: &THEME_SET,
             theme_name: theme_name.to_string(),
             image_protocol,
         }
@@ -110,8 +117,11 @@ impl StreamingParser {
 
     /// List available syntax highlighting themes
     pub fn list_themes() -> Vec<String> {
-        let theme_set = ThemeSet::load_defaults();
-        let mut themes: Vec<String> = theme_set.themes.keys().cloned().collect();
+        // Get all theme names from two-face's embedded themes
+        let mut themes: Vec<String> = EmbeddedLazyThemeSet::theme_names()
+            .iter()
+            .map(|name| name.as_name().to_string())
+            .collect();
         themes.sort();
         themes
     }
@@ -763,6 +773,15 @@ impl StreamingParser {
         format!("{}\n\n", formatted_text)
     }
 
+    /// Convert a theme name string to an EmbeddedThemeName enum variant
+    fn theme_name_to_enum(name: &str) -> Option<EmbeddedThemeName> {
+        // Find matching theme by comparing string names
+        EmbeddedLazyThemeSet::theme_names()
+            .iter()
+            .find(|theme| theme.as_name().eq_ignore_ascii_case(name))
+            .copied()
+    }
+
     fn format_code_block(&self, lines: &[String], info: &str) -> String {
         let mut output = String::new();
 
@@ -779,12 +798,11 @@ impl StreamingParser {
             .find_syntax_by_token(language)
             .unwrap_or_else(|| self.syntax_set.find_syntax_plain_text());
 
-        let theme = self
-            .theme_set
-            .themes
-            .get(&self.theme_name)
-            .or_else(|| self.theme_set.themes.get("base16-ocean.dark"))
-            .expect("Failed to load syntax highlighting theme");
+        // Get theme from two-face's embedded themes, with fallback
+        let theme = Self::theme_name_to_enum(&self.theme_name)
+            .map(|name| self.theme_set.get(name))
+            .unwrap_or_else(|| self.theme_set.get(EmbeddedThemeName::Base16OceanDark));
+
         let mut highlighter = HighlightLines::new(syntax, theme);
 
         // Process lines and collect highlighted output
