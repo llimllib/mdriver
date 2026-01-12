@@ -105,6 +105,12 @@ struct LinkData {
     end_pos: usize,
 }
 
+/// Result from parsing an HTML tag
+struct HtmlTagResult {
+    formatted: String,
+    end_pos: usize,
+}
+
 impl StreamingParser {
     pub fn new() -> Self {
         Self::with_theme("base16-ocean.dark", ImageProtocol::None)
@@ -1391,6 +1397,15 @@ impl StreamingParser {
                 }
             }
 
+            // Check for <html> tags
+            if chars[i] == '<' {
+                if let Some(html) = self.parse_html_tag(&chars, i) {
+                    result.push_str(&html.formatted);
+                    i = html.end_pos;
+                    continue;
+                }
+            }
+
             result.push(chars[i]);
             i += 1;
         }
@@ -1540,6 +1555,187 @@ impl StreamingParser {
         })
     }
 
+    /// Parse an HTML tag and return formatted output
+    /// Handles: em, i, strong, b, u, s, strike, del, code, a, pre
+    /// Unknown tags are stripped but inner content is preserved
+    fn parse_html_tag(&self, chars: &[char], start: usize) -> Option<HtmlTagResult> {
+        if chars[start] != '<' {
+            return None;
+        }
+
+        // Find the closing '>' of the opening tag
+        let mut tag_end = start + 1;
+        while tag_end < chars.len() && chars[tag_end] != '>' {
+            tag_end += 1;
+        }
+        if tag_end >= chars.len() {
+            return None;
+        }
+
+        // Extract the tag content (between < and >)
+        let tag_content: String = chars[start + 1..tag_end].iter().collect();
+        let tag_content = tag_content.trim();
+
+        // Check for self-closing tags like <br/> or <hr/>
+        if tag_content.ends_with('/') {
+            let tag_name = tag_content.trim_end_matches('/').trim().to_lowercase();
+            if tag_name == "br" {
+                return Some(HtmlTagResult {
+                    formatted: "\n".to_string(),
+                    end_pos: tag_end + 1,
+                });
+            }
+            // Skip other self-closing tags
+            return Some(HtmlTagResult {
+                formatted: String::new(),
+                end_pos: tag_end + 1,
+            });
+        }
+
+        // Extract tag name (first word, lowercased)
+        let tag_name: String = tag_content
+            .chars()
+            .take_while(|c| c.is_alphanumeric())
+            .collect::<String>()
+            .to_lowercase();
+
+        if tag_name.is_empty() {
+            return None;
+        }
+
+        // Find the closing tag </tagname>
+        let closing_tag = format!("</{}", tag_name);
+        let mut depth = 1;
+        let mut search_pos = tag_end + 1;
+        let mut content_end = None;
+
+        while search_pos < chars.len() {
+            if chars[search_pos] == '<' {
+                // Check for closing tag
+                let remaining: String = chars[search_pos..].iter().collect();
+                let remaining_lower = remaining.to_lowercase();
+                if remaining_lower.starts_with(&closing_tag) {
+                    // Find the > of the closing tag
+                    let mut close_end = search_pos;
+                    while close_end < chars.len() && chars[close_end] != '>' {
+                        close_end += 1;
+                    }
+                    depth -= 1;
+                    if depth == 0 {
+                        content_end = Some((search_pos, close_end + 1));
+                        break;
+                    }
+                    search_pos = close_end + 1;
+                    continue;
+                }
+                // Check for nested opening tag of same type
+                let open_tag = format!("<{}", tag_name);
+                if remaining_lower.starts_with(&open_tag) {
+                    let next_char_pos = search_pos + open_tag.len();
+                    if next_char_pos < chars.len() {
+                        let next_char = chars[next_char_pos];
+                        if next_char == '>' || next_char == ' ' || next_char == '/' {
+                            depth += 1;
+                        }
+                    }
+                }
+            }
+            search_pos += 1;
+        }
+
+        let (inner_end, end_pos) = content_end?;
+
+        // Extract inner content
+        let inner: String = chars[tag_end + 1..inner_end].iter().collect();
+
+        // Format based on tag type
+        let formatted = match tag_name.as_str() {
+            "em" | "i" => {
+                let formatted_inner = self.format_inline(&inner);
+                format!("\u{001b}[3m{}\u{001b}[0m", formatted_inner)
+            }
+            "strong" | "b" => {
+                let formatted_inner = self.format_inline(&inner);
+                format!("\u{001b}[1m{}\u{001b}[0m", formatted_inner)
+            }
+            "u" => {
+                let formatted_inner = self.format_inline(&inner);
+                format!("\u{001b}[4m{}\u{001b}[0m", formatted_inner)
+            }
+            "s" | "strike" | "del" => {
+                let formatted_inner = self.format_inline(&inner);
+                format!("\u{001b}[9m{}\u{001b}[0m", formatted_inner)
+            }
+            "code" => {
+                // Inline code - don't recursively format
+                format!("\u{001b}[48;5;235m {} \u{001b}[0m", inner)
+            }
+            "pre" => {
+                // Code block style - dark background, no recursive formatting
+                let lines: Vec<&str> = inner.lines().collect();
+                let mut result = String::new();
+                for line in lines {
+                    result.push_str("\u{001b}[48;5;235m ");
+                    result.push_str(line);
+                    result.push_str(" \u{001b}[0m\n");
+                }
+                result
+            }
+            "a" => {
+                // Extract href attribute
+                let href = self.extract_href(tag_content);
+                let formatted_inner = self.format_inline(&inner);
+                if let Some(url) = href {
+                    // OSC8 hyperlink format
+                    format!(
+                        "\u{001b}]8;;{}\u{001b}\\\u{001b}[34;4m{}\u{001b}[0m\u{001b}]8;;\u{001b}\\",
+                        url, formatted_inner
+                    )
+                } else {
+                    // No href, just format the inner content
+                    formatted_inner
+                }
+            }
+            _ => {
+                // Unknown tag - strip it but keep inner content
+                self.format_inline(&inner)
+            }
+        };
+
+        Some(HtmlTagResult { formatted, end_pos })
+    }
+
+    /// Extract href attribute value from tag content like 'a href="url"'
+    fn extract_href(&self, tag_content: &str) -> Option<String> {
+        let lower = tag_content.to_lowercase();
+        let href_pos = lower.find("href")?;
+        let after_href = &tag_content[href_pos + 4..];
+        let trimmed = after_href.trim_start();
+
+        // Expect '='
+        if !trimmed.starts_with('=') {
+            return None;
+        }
+        let after_eq = trimmed[1..].trim_start();
+
+        // Extract quoted value
+        if let Some(rest) = after_eq.strip_prefix('"') {
+            // Double-quoted value
+            let end = rest.find('"')?;
+            Some(rest[..end].to_string())
+        } else if let Some(rest) = after_eq.strip_prefix('\'') {
+            // Single-quoted value
+            let end = rest.find('\'')?;
+            Some(rest[..end].to_string())
+        } else {
+            // Unquoted - take until whitespace or >
+            let end = after_eq
+                .find(|c: char| c.is_whitespace() || c == '>')
+                .unwrap_or(after_eq.len());
+            Some(after_eq[..end].to_string())
+        }
+    }
+
     fn parse_image(&self, chars: &[char], start: usize) -> Option<ImageData> {
         // Looking for ![alt](src) or ![alt](src "title")
         // start points to '!'
@@ -1609,5 +1805,268 @@ impl StreamingParser {
 impl Default for StreamingParser {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parser() -> StreamingParser {
+        StreamingParser::new()
+    }
+
+    // Helper to strip ANSI codes for easier assertion
+    // Handles both CSI sequences (\x1b[...m) and OSC sequences (\x1b]...\\)
+    fn strip_ansi(text: &str) -> String {
+        let mut result = String::new();
+        let chars: Vec<char> = text.chars().collect();
+        let mut i = 0;
+
+        while i < chars.len() {
+            if chars[i] == '\x1b' {
+                i += 1;
+                if i >= chars.len() {
+                    break;
+                }
+                if chars[i] == '[' {
+                    // CSI sequence - skip until 'm'
+                    while i < chars.len() && chars[i] != 'm' {
+                        i += 1;
+                    }
+                    i += 1; // skip 'm'
+                } else if chars[i] == ']' {
+                    // OSC sequence - skip until ST (\x1b\\)
+                    while i < chars.len() {
+                        if chars[i] == '\x1b' && i + 1 < chars.len() && chars[i + 1] == '\\' {
+                            i += 2;
+                            break;
+                        }
+                        i += 1;
+                    }
+                } else {
+                    i += 1;
+                }
+            } else {
+                result.push(chars[i]);
+                i += 1;
+            }
+        }
+        result
+    }
+
+    mod html_tags {
+        use super::*;
+
+        #[test]
+        fn test_em_tag() {
+            let p = parser();
+            let result = p.format_inline("Hello <em>world</em>!");
+            assert!(result.contains("\x1b[3m")); // italic
+            assert!(result.contains("\x1b[0m")); // reset
+            assert_eq!(strip_ansi(&result), "Hello world!");
+        }
+
+        #[test]
+        fn test_i_tag() {
+            let p = parser();
+            let result = p.format_inline("Hello <i>italic</i>!");
+            assert!(result.contains("\x1b[3m")); // italic
+            assert_eq!(strip_ansi(&result), "Hello italic!");
+        }
+
+        #[test]
+        fn test_strong_tag() {
+            let p = parser();
+            let result = p.format_inline("Hello <strong>bold</strong>!");
+            assert!(result.contains("\x1b[1m")); // bold
+            assert_eq!(strip_ansi(&result), "Hello bold!");
+        }
+
+        #[test]
+        fn test_b_tag() {
+            let p = parser();
+            let result = p.format_inline("Hello <b>bold</b>!");
+            assert!(result.contains("\x1b[1m")); // bold
+            assert_eq!(strip_ansi(&result), "Hello bold!");
+        }
+
+        #[test]
+        fn test_u_tag() {
+            let p = parser();
+            let result = p.format_inline("Hello <u>underline</u>!");
+            assert!(result.contains("\x1b[4m")); // underline
+            assert_eq!(strip_ansi(&result), "Hello underline!");
+        }
+
+        #[test]
+        fn test_s_tag() {
+            let p = parser();
+            let result = p.format_inline("Hello <s>strikethrough</s>!");
+            assert!(result.contains("\x1b[9m")); // strikethrough
+            assert_eq!(strip_ansi(&result), "Hello strikethrough!");
+        }
+
+        #[test]
+        fn test_strike_tag() {
+            let p = parser();
+            let result = p.format_inline("Hello <strike>strikethrough</strike>!");
+            assert!(result.contains("\x1b[9m")); // strikethrough
+            assert_eq!(strip_ansi(&result), "Hello strikethrough!");
+        }
+
+        #[test]
+        fn test_del_tag() {
+            let p = parser();
+            let result = p.format_inline("Hello <del>deleted</del>!");
+            assert!(result.contains("\x1b[9m")); // strikethrough
+            assert_eq!(strip_ansi(&result), "Hello deleted!");
+        }
+
+        #[test]
+        fn test_code_tag() {
+            let p = parser();
+            let result = p.format_inline("Hello <code>code</code>!");
+            assert!(result.contains("\x1b[48;5;235m")); // dark background
+            assert_eq!(strip_ansi(&result), "Hello  code !");
+        }
+
+        #[test]
+        fn test_anchor_tag_with_href() {
+            let p = parser();
+            let result = p.format_inline(r#"Click <a href="https://example.com">here</a>!"#);
+            // Should contain OSC8 hyperlink
+            assert!(result.contains("\x1b]8;;https://example.com\x1b\\"));
+            assert!(result.contains("\x1b[34;4m")); // blue underline
+            assert_eq!(strip_ansi(&result), "Click here!");
+        }
+
+        #[test]
+        fn test_anchor_tag_single_quotes() {
+            let p = parser();
+            let result = p.format_inline(r#"Click <a href='https://example.com'>here</a>!"#);
+            assert!(result.contains("\x1b]8;;https://example.com\x1b\\"));
+            assert_eq!(strip_ansi(&result), "Click here!");
+        }
+
+        #[test]
+        fn test_anchor_tag_no_href() {
+            let p = parser();
+            let result = p.format_inline("Click <a>here</a>!");
+            // Should just format the inner content without hyperlink
+            assert!(!result.contains("\x1b]8;;"));
+            assert_eq!(strip_ansi(&result), "Click here!");
+        }
+
+        #[test]
+        fn test_nested_tags() {
+            let p = parser();
+            let result = p.format_inline("Hello <b><i>bold italic</i></b>!");
+            assert!(result.contains("\x1b[1m")); // bold
+            assert!(result.contains("\x1b[3m")); // italic
+            assert_eq!(strip_ansi(&result), "Hello bold italic!");
+        }
+
+        #[test]
+        fn test_unknown_tag_stripped() {
+            let p = parser();
+            let result = p.format_inline("Hello <span>content</span>!");
+            // Unknown tags should be stripped but content preserved
+            assert_eq!(strip_ansi(&result), "Hello content!");
+        }
+
+        #[test]
+        fn test_self_closing_br() {
+            let p = parser();
+            let result = p.format_inline("Line 1<br/>Line 2");
+            assert_eq!(result, "Line 1\nLine 2");
+        }
+
+        #[test]
+        fn test_case_insensitive_tags() {
+            let p = parser();
+            let result = p.format_inline("Hello <STRONG>bold</STRONG>!");
+            assert!(result.contains("\x1b[1m")); // bold
+            assert_eq!(strip_ansi(&result), "Hello bold!");
+        }
+
+        #[test]
+        fn test_tag_with_attributes() {
+            let p = parser();
+            let result = p.format_inline(r#"Hello <span class="foo">content</span>!"#);
+            // Unknown tag with attributes should still work
+            assert_eq!(strip_ansi(&result), "Hello content!");
+        }
+
+        #[test]
+        fn test_unclosed_tag_preserved() {
+            let p = parser();
+            let result = p.format_inline("Hello <em>world");
+            // Unclosed tag should be preserved as-is
+            assert_eq!(result, "Hello <em>world");
+        }
+
+        #[test]
+        fn test_less_than_not_tag() {
+            let p = parser();
+            let result = p.format_inline("5 < 10 and 10 > 5");
+            // Standalone < should be preserved
+            assert_eq!(result, "5 < 10 and 10 > 5");
+        }
+
+        #[test]
+        fn test_html_mixed_with_markdown() {
+            let p = parser();
+            let result = p.format_inline("**bold** and <em>italic</em>");
+            assert!(result.contains("\x1b[1m")); // bold from markdown
+            assert!(result.contains("\x1b[3m")); // italic from HTML
+            assert_eq!(strip_ansi(&result), "bold and italic");
+        }
+
+        #[test]
+        fn test_pre_tag() {
+            let p = parser();
+            let result = p.format_inline("<pre>code block</pre>");
+            assert!(result.contains("\x1b[48;5;235m")); // dark background
+        }
+    }
+
+    mod extract_href {
+        use super::*;
+
+        #[test]
+        fn test_double_quoted_href() {
+            let p = parser();
+            let result = p.extract_href(r#"a href="https://example.com""#);
+            assert_eq!(result, Some("https://example.com".to_string()));
+        }
+
+        #[test]
+        fn test_single_quoted_href() {
+            let p = parser();
+            let result = p.extract_href(r#"a href='https://example.com'"#);
+            assert_eq!(result, Some("https://example.com".to_string()));
+        }
+
+        #[test]
+        fn test_href_with_spaces() {
+            let p = parser();
+            let result = p.extract_href(r#"a  href = "https://example.com" "#);
+            assert_eq!(result, Some("https://example.com".to_string()));
+        }
+
+        #[test]
+        fn test_no_href() {
+            let p = parser();
+            let result = p.extract_href("a class=\"link\"");
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_href_case_insensitive() {
+            let p = parser();
+            let result = p.extract_href(r#"a HREF="https://example.com""#);
+            assert_eq!(result, Some("https://example.com".to_string()));
+        }
     }
 }
