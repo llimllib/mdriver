@@ -9,6 +9,7 @@ readme = "README.md"
 keywords = ["markdown", "terminal", "cli", "streaming", "syntax-highlighting"]
 categories = ["command-line-utilities", "text-processing"]
 authors = ["Bill Mill <bill@billmill.org>"]
+exclude = ["mdriver-*"]
 
 [[bin]]
 name = "mdriver"
