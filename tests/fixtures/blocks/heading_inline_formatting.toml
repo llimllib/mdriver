@@ -1,0 +1,19 @@
+name = "heading-inline-formatting"
+description = "Heading with inline formatting should restore heading style after inline elements"
+
+# This test verifies that when inline formatting (like _italic_) appears within
+# a heading, the heading color/style is properly restored after the inline
+# formatting ends. Before the fix, the reset code at the end of italic would
+# reset ALL formatting, causing text after the italic to lose the heading color.
+
+[[chunks]]
+input = "## Do you like the _Black_ code style?\n"
+emit = "\u001b[1;34m## Do you like the \u001b[3mBlack\u001b[0m\u001b[1;34m code style?\u001b[0m\n\n"
+
+[[chunks]]
+input = "# A **bold** heading\n"
+emit = "\u001b[1;34m# A \u001b[1mbold\u001b[0m\u001b[1;34m heading\u001b[0m\n\n"
+
+[[chunks]]
+input = "### Mixed _italic_ and **bold** text\n"
+emit = "\u001b[1;34m### Mixed \u001b[3mitalic\u001b[0m\u001b[1;34m and \u001b[1mbold\u001b[0m\u001b[1;34m text\u001b[0m\n\n"

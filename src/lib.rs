@@ -756,8 +756,14 @@ impl StreamingParser {
     fn format_heading(&self, level: usize, text: &str) -> String {
         let formatted_text = self.format_inline(text);
         // Heading: blue and bold, with line break after for spacing
+        // Replace any ANSI reset codes within the formatted text to restore heading style
+        // This prevents inline formatting (like _italic_) from breaking the heading color
+        let heading_style = "\u{001b}[1;34m";
+        let formatted_text =
+            formatted_text.replace("\u{001b}[0m", &format!("\u{001b}[0m{}", heading_style));
         format!(
-            "\u{001b}[1;34m{} {}\u{001b}[0m\n\n",
+            "{}{} {}\u{001b}[0m\n\n",
+            heading_style,
             "#".repeat(level),
             formatted_text
         )
