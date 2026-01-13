@@ -3,6 +3,11 @@ use std::env;
 use std::fs::File;
 use std::io::{self, Read};
 
+fn print_version() {
+    println!("mdriver {}", env!("CARGO_PKG_VERSION"));
+    println!("rustc: {}", env!("RUSTC_VERSION"));
+}
+
 fn print_help() {
     println!("mdriver - Streaming Markdown Printer");
     println!();
@@ -10,6 +15,7 @@ fn print_help() {
     println!("    mdriver [OPTIONS] [FILE]");
     println!();
     println!("OPTIONS:");
+    println!("    --version, -V       Print version information");
     println!("    --help              Print this help message");
     println!("    --list-themes       List available syntax highlighting themes");
     println!("    --theme <THEME>     Use specified syntax highlighting theme");
@@ -44,6 +50,10 @@ fn main() -> io::Result<()> {
 
     while i < args.len() {
         match args[i].as_str() {
+            "--version" | "-V" => {
+                print_version();
+                return Ok(());
+            }
             "--help" | "-h" => {
                 print_help();
                 return Ok(());
