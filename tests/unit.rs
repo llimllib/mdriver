@@ -526,6 +526,81 @@ mod img_tag {
     }
 }
 
+mod image_inside_link {
+    use super::*;
+
+    #[test]
+    fn test_html_img_inside_link() {
+        // This was a bug: image inside link wasn't being processed through format_inline
+        let p = parser();
+        let result = p.format_inline(
+            r#"[<img src="https://example.com/logo.png" alt="Logo"/>](https://example.com)"#,
+        );
+        // The img should be converted to ![alt](src) format, wrapped in a link
+        let stripped = strip_ansi(&result);
+        assert_eq!(stripped, "![Logo](https://example.com/logo.png)");
+        // Should have OSC8 hyperlink codes
+        assert!(result.contains("\x1b]8;;https://example.com\x1b\\"));
+    }
+
+    #[test]
+    fn test_html_img_inside_link_with_attributes() {
+        let p = parser();
+        let result = p.format_inline(
+            r#"[<img src="http://example.com/img.png" width="200" alt="My Image" style="padding: 10px"/>](https://example.com)"#,
+        );
+        let stripped = strip_ansi(&result);
+        assert_eq!(stripped, "![My Image](http://example.com/img.png)");
+    }
+
+    #[test]
+    fn test_markdown_image_inside_link() {
+        // [![alt](img-src)](link-url) pattern
+        // Note: This is a known limitation - nested markdown brackets don't parse correctly.
+        // The parser finds the first `]` instead of the matching one, so this becomes
+        // a link with text "![Badge" and URL from the image src.
+        // For proper nested image-in-link, use HTML: [<img src="..." alt="..."/>](url)
+        let p = parser();
+        let result =
+            p.format_inline("[![Badge](https://example.com/badge.svg)](https://example.com)");
+        let stripped = strip_ansi(&result);
+        // Current behavior: parses as link with text "![Badge" and URL "https://example.com/badge.svg"
+        assert_eq!(stripped, "![Badge](https://example.com)");
+    }
+
+    #[test]
+    fn test_text_and_img_inside_link() {
+        let p = parser();
+        let result = p.format_inline(
+            r#"[Click here <img src="https://example.com/icon.png" alt="icon"/>](https://example.com)"#,
+        );
+        let stripped = strip_ansi(&result);
+        assert_eq!(stripped, "Click here ![icon](https://example.com/icon.png)");
+    }
+
+    #[test]
+    fn test_bold_inside_link() {
+        // Verify other inline formatting inside links also works
+        let p = parser();
+        let result = p.format_inline("[**bold text**](https://example.com)");
+        let stripped = strip_ansi(&result);
+        assert_eq!(stripped, "bold text");
+        // Should have bold formatting
+        assert!(result.contains("\x1b[1m"));
+    }
+
+    #[test]
+    fn test_code_inside_link() {
+        let p = parser();
+        let result = p.format_inline("[`code`](https://example.com)");
+        let stripped = strip_ansi(&result);
+        // Code adds spaces around content
+        assert!(stripped.contains("code"));
+        // Should have code formatting (background color)
+        assert!(result.contains("\x1b[38;5;167;48;5;235m"));
+    }
+}
+
 mod html_entities {
     use super::*;
 
