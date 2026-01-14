@@ -1601,13 +1601,25 @@ impl StreamingParser {
             .with_guessed_format()?
             .decode()?;
 
-        // Get terminal width (assume 80 if can't determine)
-        let term_width = term_size::dimensions().map(|(w, _)| w).unwrap_or(80);
+        // Convert image pixel width to terminal columns
+        // Assume ~9 pixels per terminal column (typical for monospace fonts)
+        const PIXELS_PER_COLUMN: f64 = 9.0;
+        let natural_cols = (img.width() as f64 / PIXELS_PER_COLUMN).ceil() as usize;
 
-        // Resize to terminal width, preserve aspect ratio
-        let resized = if img.width() > term_width as u32 {
+        // Use the smaller of natural size or configured max width
+        let display_cols = natural_cols.min(self.width);
+
+        // Calculate rows to maintain aspect ratio
+        // Terminal cells are roughly 2:1 (height:width in pixels)
+        let aspect_ratio = img.height() as f64 / img.width() as f64;
+        let display_rows = ((display_cols as f64) * aspect_ratio / 2.0).ceil() as usize;
+
+        // Resize large images to reduce transfer size (cap at 2000px width)
+        // but let kitty handle the display scaling
+        let max_transfer_width = 2000u32;
+        let resized = if img.width() > max_transfer_width {
             img.resize(
-                term_width as u32,
+                max_transfer_width,
                 u32::MAX,
                 image::imageops::FilterType::Lanczos3,
             )
@@ -1619,11 +1631,11 @@ impl StreamingParser {
         let mut png_data = Vec::new();
         resized.write_to(&mut Cursor::new(&mut png_data), image::ImageFormat::Png)?;
 
-        // Render using kitty protocol
-        Ok(self.render_kitty_image(&png_data))
+        // Render using kitty protocol with display size in terminal cells
+        Ok(self.render_kitty_image(&png_data, display_cols, display_rows))
     }
 
-    fn render_kitty_image(&self, png_data: &[u8]) -> String {
+    fn render_kitty_image(&self, png_data: &[u8], columns: usize, rows: usize) -> String {
         use base64::{engine::general_purpose::STANDARD, Engine as _};
 
         let encoded = STANDARD.encode(png_data);
@@ -1641,8 +1653,12 @@ impl StreamingParser {
             let m = if is_last { 0 } else { 1 };
 
             if i == 0 {
-                // First chunk: include format and transmission parameters
-                output.push_str(&format!("\x1b_Gf=100,a=T,m={};{}\x1b\\", m, chunk));
+                // First chunk: include format, transmission parameters, and display size
+                // c=columns, r=rows tells kitty to scale the image to fit in that many cells
+                output.push_str(&format!(
+                    "\x1b_Gf=100,a=T,c={},r={},m={};{}\x1b\\",
+                    columns, rows, m, chunk
+                ));
             } else {
                 // Continuation chunks
                 output.push_str(&format!("\x1b_Gm={};{}\x1b\\", m, chunk));
@@ -1723,16 +1739,69 @@ impl StreamingParser {
         let tag_content: String = chars[start + 1..tag_end].iter().collect();
         let tag_content = tag_content.trim();
 
-        // Check for self-closing tags like <br/> or <hr/>
+        // Check for self-closing tags like <br/> or <hr/> or <img src="..."/>
         if tag_content.ends_with('/') {
-            let tag_name = tag_content.trim_end_matches('/').trim().to_lowercase();
+            // Extract tag name (first word only)
+            let tag_trimmed = tag_content.trim_end_matches('/').trim();
+            let tag_name: String = tag_trimmed
+                .chars()
+                .take_while(|c| c.is_alphanumeric())
+                .collect::<String>()
+                .to_lowercase();
+
             if tag_name == "br" {
                 return Some(HtmlTagResult {
                     formatted: "\n".to_string(),
                     end_pos: tag_end + 1,
                 });
             }
+            if tag_name == "img" {
+                // Extract src attribute and render image
+                if let Some(src) = self.extract_attr(tag_trimmed, "src") {
+                    let alt = self.extract_attr(tag_trimmed, "alt").unwrap_or_default();
+                    return Some(HtmlTagResult {
+                        formatted: self.render_image(&alt, &src),
+                        end_pos: tag_end + 1,
+                    });
+                }
+            }
             // Skip other self-closing tags
+            return Some(HtmlTagResult {
+                formatted: String::new(),
+                end_pos: tag_end + 1,
+            });
+        }
+
+        // Check for void elements (like <img>, <br>, <hr> without trailing /)
+        // Extract tag name first to check
+        let tag_name_check: String = tag_content
+            .chars()
+            .take_while(|c| c.is_alphanumeric())
+            .collect::<String>()
+            .to_lowercase();
+
+        // Handle void elements that don't need closing tags
+        if matches!(
+            tag_name_check.as_str(),
+            "img" | "br" | "hr" | "meta" | "link" | "input"
+        ) {
+            if tag_name_check == "br" {
+                return Some(HtmlTagResult {
+                    formatted: "\n".to_string(),
+                    end_pos: tag_end + 1,
+                });
+            }
+            if tag_name_check == "img" {
+                // Extract src attribute and render image
+                if let Some(src) = self.extract_attr(tag_content, "src") {
+                    let alt = self.extract_attr(tag_content, "alt").unwrap_or_default();
+                    return Some(HtmlTagResult {
+                        formatted: self.render_image(&alt, &src),
+                        end_pos: tag_end + 1,
+                    });
+                }
+            }
+            // Skip other void elements
             return Some(HtmlTagResult {
                 formatted: String::new(),
                 end_pos: tag_end + 1,
@@ -1852,12 +1921,12 @@ impl StreamingParser {
         Some(HtmlTagResult { formatted, end_pos })
     }
 
-    /// Extract href attribute value from tag content like 'a href="url"'
-    pub fn extract_href(&self, tag_content: &str) -> Option<String> {
+    /// Extract an attribute value from tag content like 'img src="url"'
+    fn extract_attr(&self, tag_content: &str, attr_name: &str) -> Option<String> {
         let lower = tag_content.to_lowercase();
-        let href_pos = lower.find("href")?;
-        let after_href = &tag_content[href_pos + 4..];
-        let trimmed = after_href.trim_start();
+        let attr_pos = lower.find(&attr_name.to_lowercase())?;
+        let after_attr = &tag_content[attr_pos + attr_name.len()..];
+        let trimmed = after_attr.trim_start();
 
         // Expect '='
         if !trimmed.starts_with('=') {
@@ -1881,6 +1950,11 @@ impl StreamingParser {
                 .unwrap_or(after_eq.len());
             Some(after_eq[..end].to_string())
         }
+    }
+
+    /// Extract href attribute value from tag content like 'a href="url"'
+    pub fn extract_href(&self, tag_content: &str) -> Option<String> {
+        self.extract_attr(tag_content, "href")
     }
 
     fn parse_image(&self, chars: &[char], start: usize) -> Option<ImageData> {

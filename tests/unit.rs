@@ -407,6 +407,125 @@ mod wrap_text_tests {
     }
 }
 
+mod img_tag {
+    use super::*;
+
+    // When ImageProtocol::None, img tags should output markdown-style ![alt](src)
+
+    #[test]
+    fn test_img_self_closing_with_space() {
+        let p = parser();
+        let result = p.format_inline(r#"<img src="https://example.com/image.png" />"#);
+        assert_eq!(result, "![](https://example.com/image.png)");
+    }
+
+    #[test]
+    fn test_img_self_closing_no_space() {
+        let p = parser();
+        let result = p.format_inline(r#"<img src="https://example.com/image.png"/>"#);
+        assert_eq!(result, "![](https://example.com/image.png)");
+    }
+
+    #[test]
+    fn test_img_void_element() {
+        // HTML5 void element - no closing tag or trailing slash
+        let p = parser();
+        let result = p.format_inline(r#"<img src="https://example.com/image.png">"#);
+        assert_eq!(result, "![](https://example.com/image.png)");
+    }
+
+    #[test]
+    fn test_img_with_alt() {
+        let p = parser();
+        let result =
+            p.format_inline(r#"<img src="https://example.com/image.png" alt="My Image"/>"#);
+        assert_eq!(result, "![My Image](https://example.com/image.png)");
+    }
+
+    #[test]
+    fn test_img_with_alt_void_element() {
+        let p = parser();
+        let result = p.format_inline(r#"<img src="https://example.com/image.png" alt="My Image">"#);
+        assert_eq!(result, "![My Image](https://example.com/image.png)");
+    }
+
+    #[test]
+    fn test_img_single_quoted_attrs() {
+        let p = parser();
+        let result =
+            p.format_inline(r#"<img src='https://example.com/image.png' alt='Alt Text'/>"#);
+        assert_eq!(result, "![Alt Text](https://example.com/image.png)");
+    }
+
+    #[test]
+    fn test_img_case_insensitive_tag() {
+        let p = parser();
+        let result = p.format_inline(r#"<IMG src="https://example.com/image.png"/>"#);
+        assert_eq!(result, "![](https://example.com/image.png)");
+    }
+
+    #[test]
+    fn test_img_case_insensitive_attrs() {
+        let p = parser();
+        let result = p.format_inline(r#"<img SRC="https://example.com/image.png" ALT="Test"/>"#);
+        assert_eq!(result, "![Test](https://example.com/image.png)");
+    }
+
+    #[test]
+    fn test_img_with_other_attrs() {
+        let p = parser();
+        let result = p.format_inline(
+            r#"<img src="https://example.com/image.png" width="200" alt="Logo" style="padding: 10px"/>"#,
+        );
+        assert_eq!(result, "![Logo](https://example.com/image.png)");
+    }
+
+    #[test]
+    fn test_img_inside_div() {
+        let p = parser();
+        let result =
+            p.format_inline(r#"<div><img src="https://example.com/image.png" alt="Test"/></div>"#);
+        assert_eq!(result, "![Test](https://example.com/image.png)");
+    }
+
+    #[test]
+    fn test_img_no_src_returns_empty() {
+        let p = parser();
+        let result = p.format_inline(r#"<img alt="No Source"/>"#);
+        // When no src attribute, should output empty (tag is skipped)
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_img_inline_with_text() {
+        let p = parser();
+        let result = p.format_inline(r#"Here is an image: <img src="https://example.com/image.png" alt="pic"/> and more text"#);
+        assert_eq!(
+            result,
+            "Here is an image: ![pic](https://example.com/image.png) and more text"
+        );
+    }
+
+    #[test]
+    fn test_multiple_img_tags() {
+        let p = parser();
+        let result = p.format_inline(
+            r#"<img src="https://example.com/a.png" alt="A"/> and <img src="https://example.com/b.png" alt="B"/>"#,
+        );
+        assert_eq!(
+            result,
+            "![A](https://example.com/a.png) and ![B](https://example.com/b.png)"
+        );
+    }
+
+    #[test]
+    fn test_img_with_local_path() {
+        let p = parser();
+        let result = p.format_inline(r#"<img src="./images/logo.png" alt="Logo"/>"#);
+        assert_eq!(result, "![Logo](./images/logo.png)");
+    }
+}
+
 mod html_entities {
     use super::*;
 
