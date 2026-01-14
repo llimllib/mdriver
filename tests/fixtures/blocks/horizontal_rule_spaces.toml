@@ -1,5 +1,6 @@
 name = "horizontal-rule-spaces"
 description = "Horizontal rule with spaces between characters"
+width = 80
 
 [[chunks]]
 input = "- - -\n"

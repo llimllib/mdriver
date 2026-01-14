@@ -1,5 +1,6 @@
 name = "horizontal-rule-basic"
 description = "Basic horizontal rule with --- should emit immediately"
+width = 80
 
 [[chunks]]
 input = "---\n"

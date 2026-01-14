@@ -1,5 +1,6 @@
 name = "horizontal-rule-in-list"
 description = "Horizontal rule should interrupt a list"
+width = 80
 
 [[chunks]]
 input = "- Foo\n"
