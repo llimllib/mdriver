@@ -221,6 +221,40 @@ mod html_tags {
     }
 }
 
+mod html_comments {
+    use super::*;
+
+    #[test]
+    fn test_comment_line_stripped() {
+        let mut p = parser();
+        let result = p.feed("<!-- comment -->\n\n");
+        assert_eq!(strip_ansi(&result), "", "Comment line should be stripped");
+    }
+
+    #[test]
+    fn test_inline_comment_stripped() {
+        let mut p = parser();
+        let result = p.feed("Text <!-- comment --> more\n\n");
+        // When the comment is stripped, the surrounding spaces collapse to one
+        assert_eq!(
+            strip_ansi(&result),
+            "Text more\n\n",
+            "Inline comment should be stripped"
+        );
+    }
+
+    #[test]
+    fn test_comment_between_blocks() {
+        let mut p = parser();
+        let r1 = p.feed("# Hello\n\n");
+        let r2 = p.feed("<!-- comment -->\n\n");
+        let r3 = p.feed("## World\n\n");
+        assert!(strip_ansi(&r1).contains("# Hello"));
+        assert_eq!(strip_ansi(&r2), "", "Comment should be stripped");
+        assert!(strip_ansi(&r3).contains("## World"));
+    }
+}
+
 mod extract_href {
     use super::*;
 

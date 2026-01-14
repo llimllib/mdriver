@@ -436,6 +436,12 @@ impl StreamingParser {
             return None;
         }
 
+        // Check for HTML comment line (<!-- ... -->)
+        // These should be silently skipped
+        if self.is_html_comment_line(trimmed) {
+            return None;
+        }
+
         // Check for ATX heading (# )
         if let Some(level) = self.parse_atx_heading(trimmed) {
             let text = trimmed[level..].trim_start().to_string();
@@ -808,6 +814,22 @@ impl StreamingParser {
         }
 
         None
+    }
+
+    /// Check if a line is entirely an HTML comment (<!-- ... -->)
+    fn is_html_comment_line(&self, line: &str) -> bool {
+        let trimmed = line.trim();
+        if !trimmed.starts_with("<!--") {
+            return false;
+        }
+        if !trimmed.ends_with("-->") {
+            return false;
+        }
+        // Ensure the comment is properly formed (has content or is empty)
+        // and doesn't have an early --> before the final one
+        let inner = &trimmed[4..trimmed.len() - 3];
+        // Make sure there's no --> in the middle (which would mean malformed)
+        !inner.contains("-->")
     }
 
     fn is_horizontal_rule(&self, line: &str) -> bool {
@@ -2149,9 +2171,31 @@ impl StreamingParser {
 
     /// Parse an HTML tag and return formatted output
     /// Handles: em, i, strong, b, u, s, strike, del, code, a, pre
+    /// HTML comments (<!-- ... -->) are stripped entirely
     /// Unknown tags are stripped but inner content is preserved
     fn parse_html_tag(&self, chars: &[char], start: usize) -> Option<HtmlTagResult> {
         if chars[start] != '<' {
+            return None;
+        }
+
+        // Check for HTML comments: <!-- ... -->
+        if start + 3 < chars.len()
+            && chars[start + 1] == '!'
+            && chars[start + 2] == '-'
+            && chars[start + 3] == '-'
+        {
+            // Find the closing -->
+            let mut i = start + 4;
+            while i + 2 < chars.len() {
+                if chars[i] == '-' && chars[i + 1] == '-' && chars[i + 2] == '>' {
+                    return Some(HtmlTagResult {
+                        formatted: String::new(),
+                        end_pos: i + 3,
+                    });
+                }
+                i += 1;
+            }
+            // No closing --> found, don't consume anything
             return None;
         }
 
