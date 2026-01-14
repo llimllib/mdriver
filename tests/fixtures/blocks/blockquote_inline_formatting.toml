@@ -7,4 +7,4 @@ emit = ""
 
 [[chunks]]
 input = "\n"
-emit = " │ This is \u001b[1mbold\u001b[0m and \u001b[3mitalic\u001b[0m and \u001b[48;5;235m code \u001b[0m\n\n"
+emit = " │ This is \u001b[1mbold\u001b[0m and \u001b[3mitalic\u001b[0m and \u001b[38;5;167;48;5;235m code \u001b[0m\n\n"

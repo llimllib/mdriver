@@ -1454,7 +1454,7 @@ impl StreamingParser {
             // Check for `code`
             if chars[i] == '`' {
                 if let Some(end) = self.find_closing("`", &chars, i + 1) {
-                    result.push_str("\u{001b}[48;5;235m ");
+                    result.push_str("\u{001b}[38;5;167;48;5;235m ");
                     result.extend(&chars[i + 1..end]);
                     result.push_str(" \u{001b}[0m");
                     i = end + 1;
@@ -1759,14 +1759,14 @@ impl StreamingParser {
             }
             "code" => {
                 // Inline code - don't recursively format
-                format!("\u{001b}[48;5;235m {} \u{001b}[0m", inner)
+                format!("\u{001b}[38;5;167;48;5;235m {} \u{001b}[0m", inner)
             }
             "pre" => {
                 // Code block style - dark background, no recursive formatting
                 let lines: Vec<&str> = inner.lines().collect();
                 let mut result = String::new();
                 for line in lines {
-                    result.push_str("\u{001b}[48;5;235m ");
+                    result.push_str("\u{001b}[38;5;167;48;5;235m ");
                     result.push_str(line);
                     result.push_str(" \u{001b}[0m\n");
                 }
