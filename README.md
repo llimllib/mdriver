@@ -187,6 +187,69 @@ mdriver --images kitty document.md
 
 **Note**: Image rendering requires a terminal that supports the kitty graphics protocol. In terminals without support, images will display as alt text.
 
+## HTML Entity Support
+
+mdriver decodes HTML entities in markdown text, supporting both named entities and numeric character references.
+
+### Supported Named Entities
+
+| Entity | Character | Description |
+|--------|-----------|-------------|
+| **Essential (XML)** |
+| `&amp;` | `&` | Ampersand |
+| `&lt;` | `<` | Less than |
+| `&gt;` | `>` | Greater than |
+| `&quot;` | `"` | Quotation mark |
+| `&apos;` | `'` | Apostrophe |
+| **Whitespace** |
+| `&nbsp;` | | Non-breaking space |
+| **Typographic** |
+| `&ndash;` | `–` | En dash |
+| `&mdash;` | `—` | Em dash |
+| `&hellip;` | `…` | Horizontal ellipsis |
+| `&lsquo;` | `'` | Left single quote |
+| `&rsquo;` | `'` | Right single quote |
+| `&ldquo;` | `"` | Left double quote |
+| `&rdquo;` | `"` | Right double quote |
+| `&bull;` | `•` | Bullet |
+| `&middot;` | `·` | Middle dot |
+| **Symbols** |
+| `&copy;` | `©` | Copyright |
+| `&reg;` | `®` | Registered |
+| `&trade;` | `™` | Trademark |
+| `&deg;` | `°` | Degree |
+| `&plusmn;` | `±` | Plus-minus |
+| `&times;` | `×` | Multiplication |
+| `&divide;` | `÷` | Division |
+| **Fractions** |
+| `&frac14;` | `¼` | One quarter |
+| `&frac12;` | `½` | One half |
+| `&frac34;` | `¾` | Three quarters |
+| **Currency** |
+| `&cent;` | `¢` | Cent |
+| `&pound;` | `£` | Pound |
+| `&euro;` | `€` | Euro |
+| `&yen;` | `¥` | Yen |
+| **Arrows** |
+| `&larr;` | `←` | Left arrow |
+| `&rarr;` | `→` | Right arrow |
+| `&uarr;` | `↑` | Up arrow |
+| `&darr;` | `↓` | Down arrow |
+
+### Numeric Character References
+
+In addition to named entities, mdriver supports numeric references for any Unicode character:
+
+- **Decimal**: `&#169;` → `©`
+- **Hexadecimal**: `&#x00A9;` → `©`
+
+### Example
+
+```bash
+$ echo "5 &lt; 10 &mdash; Tom &amp; Jerry &copy; 2024" | mdriver
+5 < 10 — Tom & Jerry © 2024
+```
+
 ## Conformance Test Suite
 
 This project uses a comprehensive conformance test suite to verify streaming behavior, markdown parsing, and ANSI formatting.

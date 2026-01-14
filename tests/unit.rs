@@ -406,3 +406,220 @@ mod wrap_text_tests {
         }
     }
 }
+
+mod html_entities {
+    use super::*;
+
+    // Essential XML entities
+    #[test]
+    fn test_amp_entity() {
+        let p = parser();
+        let result = p.format_inline("Tom &amp; Jerry");
+        assert_eq!(result, "Tom & Jerry");
+    }
+
+    #[test]
+    fn test_lt_entity() {
+        let p = parser();
+        let result = p.format_inline("5 &lt; 10");
+        assert_eq!(result, "5 < 10");
+    }
+
+    #[test]
+    fn test_gt_entity() {
+        let p = parser();
+        let result = p.format_inline("10 &gt; 5");
+        assert_eq!(result, "10 > 5");
+    }
+
+    #[test]
+    fn test_quot_entity() {
+        let p = parser();
+        let result = p.format_inline("He said &quot;hello&quot;");
+        assert_eq!(result, "He said \"hello\"");
+    }
+
+    #[test]
+    fn test_apos_entity() {
+        let p = parser();
+        let result = p.format_inline("It&apos;s great");
+        assert_eq!(result, "It's great");
+    }
+
+    // Whitespace
+    #[test]
+    fn test_nbsp_entity() {
+        let p = parser();
+        let result = p.format_inline("Hello&nbsp;World");
+        assert_eq!(result, "Hello\u{00A0}World");
+    }
+
+    // Typographic entities
+    #[test]
+    fn test_ndash_entity() {
+        let p = parser();
+        let result = p.format_inline("pages 10&ndash;20");
+        assert_eq!(result, "pages 10–20");
+    }
+
+    #[test]
+    fn test_mdash_entity() {
+        let p = parser();
+        let result = p.format_inline("Wait&mdash;what?");
+        assert_eq!(result, "Wait—what?");
+    }
+
+    #[test]
+    fn test_hellip_entity() {
+        let p = parser();
+        let result = p.format_inline("To be continued&hellip;");
+        assert_eq!(result, "To be continued…");
+    }
+
+    #[test]
+    fn test_curly_quotes() {
+        let p = parser();
+        let result = p.format_inline("&ldquo;Hello&rdquo; and &lsquo;hi&rsquo;");
+        assert_eq!(result, "\u{201C}Hello\u{201D} and \u{2018}hi\u{2019}");
+    }
+
+    #[test]
+    fn test_bull_entity() {
+        let p = parser();
+        let result = p.format_inline("Item &bull; Item");
+        assert_eq!(result, "Item • Item");
+    }
+
+    // Symbols
+    #[test]
+    fn test_copy_entity() {
+        let p = parser();
+        let result = p.format_inline("&copy; 2024");
+        assert_eq!(result, "© 2024");
+    }
+
+    #[test]
+    fn test_reg_entity() {
+        let p = parser();
+        let result = p.format_inline("Brand&reg;");
+        assert_eq!(result, "Brand®");
+    }
+
+    #[test]
+    fn test_trade_entity() {
+        let p = parser();
+        let result = p.format_inline("Product&trade;");
+        assert_eq!(result, "Product™");
+    }
+
+    #[test]
+    fn test_deg_entity() {
+        let p = parser();
+        let result = p.format_inline("90&deg;");
+        assert_eq!(result, "90°");
+    }
+
+    #[test]
+    fn test_math_entities() {
+        let p = parser();
+        let result = p.format_inline("5 &plusmn; 2, 3 &times; 4, 10 &divide; 2");
+        assert_eq!(result, "5 ± 2, 3 × 4, 10 ÷ 2");
+    }
+
+    // Fractions
+    #[test]
+    fn test_fraction_entities() {
+        let p = parser();
+        let result = p.format_inline("&frac14; + &frac12; = &frac34;");
+        assert_eq!(result, "¼ + ½ = ¾");
+    }
+
+    // Currency
+    #[test]
+    fn test_currency_entities() {
+        let p = parser();
+        let result = p.format_inline("&cent; &pound; &euro; &yen;");
+        assert_eq!(result, "¢ £ € ¥");
+    }
+
+    // Arrows
+    #[test]
+    fn test_arrow_entities() {
+        let p = parser();
+        let result = p.format_inline("&larr; &rarr; &uarr; &darr;");
+        assert_eq!(result, "← → ↑ ↓");
+    }
+
+    // Numeric entities (decimal)
+    #[test]
+    fn test_numeric_decimal_entity() {
+        let p = parser();
+        let result = p.format_inline("&#169; &#8212;");
+        assert_eq!(result, "© —");
+    }
+
+    // Numeric entities (hex)
+    #[test]
+    fn test_numeric_hex_entity() {
+        let p = parser();
+        let result = p.format_inline("&#x00A9; &#x2014;");
+        assert_eq!(result, "© —");
+    }
+
+    #[test]
+    fn test_numeric_hex_uppercase() {
+        let p = parser();
+        let result = p.format_inline("&#X00A9;");
+        assert_eq!(result, "©");
+    }
+
+    // Entity without semicolon (common in wild markdown)
+    #[test]
+    fn test_entity_without_semicolon() {
+        let p = parser();
+        // The space after &nbsp should be preserved
+        let result = p.format_inline("Hello&nbsp world");
+        assert_eq!(result, "Hello\u{00A0} world");
+    }
+
+    // Unknown entity should be preserved
+    #[test]
+    fn test_unknown_entity_preserved() {
+        let p = parser();
+        let result = p.format_inline("Hello &unknown; world");
+        assert_eq!(result, "Hello &unknown; world");
+    }
+
+    // Entity mixed with markdown formatting
+    #[test]
+    fn test_entity_with_bold() {
+        let p = parser();
+        let result = p.format_inline("**Tom &amp; Jerry**");
+        assert!(result.contains("\x1b[1m")); // bold
+        assert_eq!(strip_ansi(&result), "Tom & Jerry");
+    }
+
+    // Multiple entities in sequence
+    #[test]
+    fn test_multiple_entities() {
+        let p = parser();
+        let result = p.format_inline("&lt;&lt; &amp;&amp; &gt;&gt;");
+        assert_eq!(result, "<< && >>");
+    }
+
+    // Edge case: ampersand alone
+    #[test]
+    fn test_ampersand_alone() {
+        let p = parser();
+        let result = p.format_inline("Tom & Jerry");
+        assert_eq!(result, "Tom & Jerry");
+    }
+
+    // Edge case: ampersand at end of string
+    #[test]
+    fn test_ampersand_at_end() {
+        let p = parser();
+        let result = p.format_inline("Test &");
+        assert_eq!(result, "Test &");
+    }
+}
