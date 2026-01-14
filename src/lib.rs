@@ -95,6 +95,8 @@ pub struct StreamingParser {
     theme_name: String,
     image_protocol: ImageProtocol,
     width: usize,
+    /// Cache for prefetched image data (URL -> image bytes)
+    image_cache: HashMap<String, Vec<u8>>,
 }
 
 /// Calculate the default output width: min(terminal_width, 80)
@@ -174,6 +176,7 @@ impl StreamingParser {
             theme_name: theme_name.to_string(),
             image_protocol,
             width: default_width(),
+            image_cache: HashMap::new(),
         }
     }
 
@@ -188,6 +191,7 @@ impl StreamingParser {
             theme_name: theme_name.to_string(),
             image_protocol,
             width,
+            image_cache: HashMap::new(),
         }
     }
 
@@ -200,6 +204,107 @@ impl StreamingParser {
             .collect();
         themes.sort();
         themes
+    }
+
+    /// Extract all image URLs from text content.
+    /// Finds both markdown images ![alt](src) and HTML <img src="..."> tags.
+    fn extract_image_urls(&self, text: &str) -> Vec<String> {
+        let mut urls = Vec::new();
+        let chars: Vec<char> = text.chars().collect();
+        let mut i = 0;
+
+        while i < chars.len() {
+            // Check for ![alt](src) markdown images
+            if chars[i] == '!' && i + 1 < chars.len() && chars[i + 1] == '[' {
+                if let Some(img) = self.parse_image(&chars, i) {
+                    urls.push(img.src.clone());
+                    i = img.end_pos;
+                    continue;
+                }
+            }
+
+            // Check for <img src="..."> HTML tags
+            if chars[i] == '<' {
+                let remaining: String = chars[i..].iter().collect();
+                let lower = remaining.to_lowercase();
+                if lower.starts_with("<img ") || lower.starts_with("<img/") {
+                    // Find the closing >
+                    if let Some(end_offset) = remaining.find('>') {
+                        let tag_content = &remaining[1..end_offset];
+                        if let Some(src) = self.extract_attr(tag_content, "src") {
+                            urls.push(src);
+                        }
+                        i += end_offset + 1;
+                        continue;
+                    }
+                }
+            }
+
+            // Check for [text](url) links that might contain images
+            if chars[i] == '[' {
+                if let Some(link) = self.parse_link(&chars, i) {
+                    // Recursively extract image URLs from link text
+                    urls.extend(self.extract_image_urls(&link.text));
+                    i = link.end_pos;
+                    continue;
+                }
+            }
+
+            i += 1;
+        }
+
+        urls
+    }
+
+    /// Prefetch images in parallel, storing results in the cache.
+    /// Only fetches URLs that aren't already cached.
+    fn prefetch_images(&mut self, urls: &[String]) {
+        use std::sync::mpsc;
+        use std::thread;
+
+        // Filter to URLs we haven't cached yet
+        let urls_to_fetch: Vec<String> = urls
+            .iter()
+            .filter(|url| !self.image_cache.contains_key(*url))
+            .cloned()
+            .collect();
+
+        if urls_to_fetch.is_empty() {
+            return;
+        }
+
+        // Spawn threads to download in parallel
+        let (tx, rx) = mpsc::channel();
+
+        for url in urls_to_fetch.iter().cloned() {
+            let tx = tx.clone();
+            thread::spawn(move || {
+                let result = Self::fetch_image_static(&url);
+                let _ = tx.send((url, result));
+            });
+        }
+
+        // Drop the original sender so rx.iter() terminates
+        drop(tx);
+
+        // Collect results
+        for (url, result) in rx {
+            if let Ok(data) = result {
+                self.image_cache.insert(url, data);
+            }
+        }
+    }
+
+    /// Static method to fetch image data (can be called from threads)
+    fn fetch_image_static(src: &str) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+        if src.starts_with("http://") || src.starts_with("https://") {
+            let response = ureq::get(src).call()?;
+            let mut bytes = Vec::new();
+            std::io::Read::read_to_end(&mut response.into_reader(), &mut bytes)?;
+            Ok(bytes)
+        } else {
+            std::fs::read(src).map_err(|e| e.into())
+        }
     }
 
     /// Feed a chunk of markdown to the parser
@@ -786,6 +891,15 @@ impl StreamingParser {
         let block = std::mem::replace(&mut self.current_block, BlockBuilder::None);
         self.state = ParserState::Ready;
 
+        // If images are enabled, prefetch all images in the block in parallel
+        if self.image_protocol != ImageProtocol::None {
+            let block_text = self.extract_block_text(&block);
+            let urls = self.extract_image_urls(&block_text);
+            if !urls.is_empty() {
+                self.prefetch_images(&urls);
+            }
+        }
+
         match block {
             BlockBuilder::None => None,
             BlockBuilder::Paragraph { lines } => Some(self.format_paragraph(&lines)),
@@ -797,6 +911,33 @@ impl StreamingParser {
                 rows,
             } => Some(self.format_table(&header, &alignments, &rows)),
             BlockBuilder::Blockquote { lines, .. } => Some(self.format_blockquote(&lines)),
+        }
+    }
+
+    /// Extract all text content from a block for image URL scanning
+    fn extract_block_text(&self, block: &BlockBuilder) -> String {
+        match block {
+            BlockBuilder::None => String::new(),
+            BlockBuilder::Paragraph { lines } => lines.join("\n"),
+            BlockBuilder::CodeBlock { .. } => String::new(), // Code blocks don't have images
+            BlockBuilder::List { items } => items
+                .iter()
+                .map(|(_, _, s)| s.as_str())
+                .collect::<Vec<_>>()
+                .join("\n"),
+            BlockBuilder::Table { header, rows, .. } => {
+                let mut text = header.join("\n");
+                for row in rows {
+                    text.push('\n');
+                    text.push_str(&row.join("\n"));
+                }
+                text
+            }
+            BlockBuilder::Blockquote { lines, .. } => lines
+                .iter()
+                .map(|(_, s)| s.as_str())
+                .collect::<Vec<_>>()
+                .join("\n"),
         }
     }
 
@@ -1445,13 +1586,15 @@ impl StreamingParser {
             // Check for [text](url) hyperlinks
             if chars[i] == '[' {
                 if let Some(link) = self.parse_link(&chars, i) {
+                    // Process link text through format_inline to handle images, formatting, etc.
+                    let formatted_text = self.format_inline(&link.text);
                     // OSC8 format with blue and underline styling
                     result.push_str("\u{001b}]8;;");
                     result.push_str(&link.url);
                     result.push_str("\u{001b}\\");
                     // Blue and underlined
                     result.push_str("\u{001b}[34;4m");
-                    result.push_str(&link.text);
+                    result.push_str(&formatted_text);
                     result.push_str("\u{001b}[0m");
                     result.push_str("\u{001b}]8;;\u{001b}\\");
                     i = link.end_pos;
@@ -1580,6 +1723,12 @@ impl StreamingParser {
     }
 
     fn load_image_data(&self, src: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        // Check cache first (populated by prefetch_images)
+        if let Some(data) = self.image_cache.get(src) {
+            return Ok(data.clone());
+        }
+
+        // Not in cache, fetch directly (fallback for non-prefetched images)
         if src.starts_with("http://") || src.starts_with("https://") {
             // Fetch remote image
             let response = ureq::get(src).call()?;
