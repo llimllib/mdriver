@@ -1164,9 +1164,7 @@ impl StreamingParser {
 
     fn format_horizontal_rule(&self) -> String {
         // Use a line of dashes with dim/gray color
-        // Terminal width aware, but default to 80 if unavailable
-        let width = term_size::dimensions().map(|(w, _)| w).unwrap_or(80);
-        let rule = "─".repeat(width);
+        let rule = "─".repeat(self.width);
         format!("\u{001b}[2m{}\u{001b}[0m\n\n", rule)
     }
 

@@ -1,5 +1,6 @@
 name = "horizontal-rule-asterisks"
 description = "Horizontal rule with *** should emit immediately"
+width = 80
 
 [[chunks]]
 input = "***\n"
