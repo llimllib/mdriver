@@ -817,3 +817,153 @@ mod html_entities {
         assert_eq!(result, "Test &");
     }
 }
+
+mod reference_links {
+    use super::*;
+
+    // Test full reference link [text][label] when definition is known
+    #[test]
+    fn test_full_reference_link_resolved() {
+        let mut p = parser();
+        // First feed the definition
+        let _ = p.feed("[example]: https://example.com\n\n");
+        // Now feed content with a reference link
+        let result = p.feed("Visit [the site][example] today.\n\n");
+        let stripped = strip_ansi(&result);
+        assert!(stripped.contains("the site"));
+        // Should be a hyperlink (OSC8)
+        assert!(result.contains("\x1b]8;;https://example.com"));
+    }
+
+    // Test collapsed reference link [label][] when definition is known
+    #[test]
+    fn test_collapsed_reference_link_resolved() {
+        let mut p = parser();
+        // First feed the definition
+        let _ = p.feed("[example]: https://example.com\n\n");
+        // Now feed content with a collapsed reference link
+        let result = p.feed("Visit [example][] today.\n\n");
+        let stripped = strip_ansi(&result);
+        assert!(stripped.contains("example"));
+        // Should be a hyperlink (OSC8)
+        assert!(result.contains("\x1b]8;;https://example.com"));
+    }
+
+    // Test shortcut reference link [label] when definition is known
+    #[test]
+    fn test_shortcut_reference_link_resolved() {
+        let mut p = parser();
+        // First feed the definition
+        let _ = p.feed("[example]: https://example.com\n\n");
+        // Now feed content with a shortcut reference link
+        let result = p.feed("Visit [example] today.\n\n");
+        let stripped = strip_ansi(&result);
+        assert!(stripped.contains("example"));
+        // Should be a hyperlink (OSC8)
+        assert!(result.contains("\x1b]8;;https://example.com"));
+    }
+
+    // Test case-insensitive label matching
+    #[test]
+    fn test_case_insensitive_label() {
+        let mut p = parser();
+        // Definition with lowercase label
+        let _ = p.feed("[example]: https://example.com\n\n");
+        // Reference with uppercase label
+        let result = p.feed("Visit [EXAMPLE][] today.\n\n");
+        // Should still be a hyperlink
+        assert!(result.contains("\x1b]8;;https://example.com"));
+    }
+
+    // Test citation style when definition comes after usage
+    #[test]
+    fn test_citation_style_unresolved() {
+        let mut p = parser();
+        // Reference link before definition
+        let result = p.feed("Read the [documentation][docs] first.\n\n");
+        let stripped = strip_ansi(&result);
+        // Should have citation-style output
+        assert!(stripped.contains("documentation[1]"));
+    }
+
+    // Test that first definition wins for duplicate labels
+    #[test]
+    fn test_first_definition_wins() {
+        let mut p = parser();
+        let _ = p.feed("[test]: https://first.com\n\n");
+        let _ = p.feed("[test]: https://second.com\n\n");
+        let result = p.feed("Visit [test].\n\n");
+        // Should use first URL
+        assert!(result.contains("https://first.com"));
+        assert!(!result.contains("https://second.com"));
+    }
+
+    // Test bibliography output at flush
+    #[test]
+    fn test_bibliography_at_flush() {
+        let mut p = parser();
+        // Reference link before definition
+        let _ = p.feed("Visit [mysite][site].\n\n");
+        // Then provide the definition
+        let _ = p.feed("[site]: https://mysite.com\n\n");
+        // Flush should include bibliography
+        let flush_result = p.flush();
+        assert!(flush_result.contains("References"));
+        assert!(flush_result.contains("[1]"));
+        assert!(flush_result.contains("https://mysite.com"));
+    }
+
+    // Test unresolved reference in bibliography
+    #[test]
+    fn test_unresolved_in_bibliography() {
+        let mut p = parser();
+        // Reference link with no definition
+        let _ = p.feed("Visit [nowhere][missing].\n\n");
+        // Flush should show unresolved
+        let flush_result = p.flush();
+        assert!(flush_result.contains("unresolved"));
+    }
+
+    // Test link definition with title
+    #[test]
+    fn test_definition_with_title() {
+        let mut p = parser();
+        let _ = p.feed("[example]: https://example.com \"Example Site\"\n\n");
+        let result = p.feed("Visit [example].\n\n");
+        // Should be a hyperlink (title is stored but not displayed inline)
+        assert!(result.contains("\x1b]8;;https://example.com"));
+    }
+
+    // Test angle-bracketed URL in definition
+    #[test]
+    fn test_angle_bracketed_url() {
+        let mut p = parser();
+        let _ = p.feed("[example]: <https://example.com/path with spaces>\n\n");
+        let result = p.feed("Visit [example].\n\n");
+        // Should be a hyperlink with the URL
+        assert!(result.contains("https://example.com/path with spaces"));
+    }
+
+    // Test that link definitions don't emit content
+    #[test]
+    fn test_definition_no_emission() {
+        let mut p = parser();
+        let result = p.feed("[example]: https://example.com\n\n");
+        // Link definitions should not emit anything
+        assert!(result.is_empty());
+    }
+
+    // Test multiple reference links
+    #[test]
+    fn test_multiple_references() {
+        let mut p = parser();
+        // Feed definitions first
+        let _ = p.feed("[a]: https://a.com\n");
+        let _ = p.feed("[b]: https://b.com\n\n");
+        // Feed content with multiple references
+        let result = p.feed("Visit [a] and [b].\n\n");
+        // Both should be hyperlinks
+        assert!(result.contains("https://a.com"));
+        assert!(result.contains("https://b.com"));
+    }
+}

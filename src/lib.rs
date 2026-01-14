@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
@@ -97,6 +98,12 @@ pub struct StreamingParser {
     width: usize,
     /// Cache for prefetched image data (URL -> image bytes)
     image_cache: HashMap<String, Vec<u8>>,
+    /// Link reference definitions: normalized_label -> (url, optional_title)
+    link_definitions: HashMap<String, (String, Option<String>)>,
+    /// Pending citations for bibliography: (citation_number, label, display_text)
+    pending_citations: RefCell<Vec<(usize, String, String)>>,
+    /// Next citation number to assign
+    next_citation_number: RefCell<usize>,
 }
 
 /// Calculate the default output width: min(terminal_width, 80)
@@ -154,6 +161,16 @@ struct LinkData {
     end_pos: usize,
 }
 
+/// Result from parsing a reference-style link
+struct ReferenceLinkData {
+    /// The link text (what to display)
+    text: String,
+    /// The reference label (for lookup, not necessarily same as text)
+    label: String,
+    /// Position after the link syntax
+    end_pos: usize,
+}
+
 /// Result from parsing an HTML tag
 struct HtmlTagResult {
     formatted: String,
@@ -177,6 +194,9 @@ impl StreamingParser {
             image_protocol,
             width: default_width(),
             image_cache: HashMap::new(),
+            link_definitions: HashMap::new(),
+            pending_citations: RefCell::new(Vec::new()),
+            next_citation_number: RefCell::new(1),
         }
     }
 
@@ -192,6 +212,9 @@ impl StreamingParser {
             image_protocol,
             width,
             image_cache: HashMap::new(),
+            link_definitions: HashMap::new(),
+            pending_citations: RefCell::new(Vec::new()),
+            next_citation_number: RefCell::new(1),
         }
     }
 
@@ -345,7 +368,52 @@ impl StreamingParser {
             output.push_str(&emission);
         }
 
+        // Emit bibliography if there are pending citations
+        if let Some(bibliography) = self.format_bibliography() {
+            output.push_str(&bibliography);
+        }
+
         output
+    }
+
+    /// Format the bibliography section with pending citations
+    fn format_bibliography(&self) -> Option<String> {
+        let citations = self.pending_citations.borrow();
+        if citations.is_empty() {
+            return None;
+        }
+
+        let mut output = String::new();
+
+        // Header with a horizontal rule and title
+        output.push_str("\n\u{001b}[1;34m─── References ───\u{001b}[0m\n\n");
+
+        for (num, label, _text) in citations.iter() {
+            let normalized_label = self.normalize_link_label(label);
+
+            // Check if we now have a definition
+            if let Some((url, title)) = self.link_definitions.get(&normalized_label) {
+                // Render as OSC8 hyperlink
+                output.push_str(&format!(
+                    "[{}] {}: \u{001b}]8;;{}\u{001b}\\\u{001b}[34;4m{}\u{001b}[0m\u{001b}]8;;\u{001b}\\",
+                    num, label, url, url
+                ));
+
+                if let Some(t) = title {
+                    output.push_str(&format!(" \"{}\"", t));
+                }
+            } else {
+                // No definition found - mark as unresolved
+                output.push_str(&format!(
+                    "[{}] {}: \u{001b}[31m(unresolved)\u{001b}[0m",
+                    num, label
+                ));
+            }
+            output.push('\n');
+        }
+
+        output.push('\n');
+        Some(output)
     }
 
     fn process_line(&mut self, line: &str) -> Option<String> {
@@ -412,6 +480,17 @@ impl StreamingParser {
             self.current_block = BlockBuilder::List {
                 items: vec![(indent, item_type, trimmed.to_string())],
             };
+            return None;
+        }
+
+        // Check for link reference definition [label]: url "title"
+        // These are stored but never emit content
+        if let Some((label, url, title)) = self.parse_link_definition(trimmed) {
+            let normalized_label = self.normalize_link_label(&label);
+            // First definition wins (don't overwrite)
+            self.link_definitions
+                .entry(normalized_label)
+                .or_insert((url, title));
             return None;
         }
 
@@ -794,6 +873,110 @@ impl StreamingParser {
         } else {
             None
         }
+    }
+
+    /// Normalize a link label for matching per GFM spec:
+    /// - Strip leading/trailing whitespace
+    /// - Collapse internal whitespace to single space
+    /// - Unicode case fold (lowercase for ASCII)
+    fn normalize_link_label(&self, label: &str) -> String {
+        label
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase()
+    }
+
+    /// Try to parse a link reference definition from a line.
+    /// Returns Some((label, url, optional_title)) if successful.
+    /// Link definition format: [label]: url "optional title"
+    fn parse_link_definition(&self, line: &str) -> Option<(String, String, Option<String>)> {
+        let trimmed = line.trim_end_matches('\n');
+
+        // Check indentation (0-3 spaces allowed)
+        let leading_spaces = trimmed.len() - trimmed.trim_start().len();
+        if leading_spaces > 3 {
+            return None;
+        }
+
+        let trimmed = trimmed.trim_start();
+
+        // Must start with [
+        if !trimmed.starts_with('[') {
+            return None;
+        }
+
+        // Find the closing ] for the label - handle escaped brackets
+        let mut label_end = None;
+        let mut in_escape = false;
+        for (i, ch) in trimmed[1..].char_indices() {
+            if in_escape {
+                in_escape = false;
+                continue;
+            }
+            if ch == '\\' {
+                in_escape = true;
+                continue;
+            }
+            if ch == ']' {
+                label_end = Some(i);
+                break;
+            }
+        }
+
+        let label_end = label_end?;
+        let label = &trimmed[1..label_end + 1];
+
+        // Label must have at least one non-whitespace character
+        if label.trim().is_empty() {
+            return None;
+        }
+
+        // Must be followed by :
+        let after_label = &trimmed[label_end + 2..];
+        if !after_label.starts_with(':') {
+            return None;
+        }
+
+        // Parse URL (after : and optional whitespace)
+        let url_part = after_label[1..].trim_start();
+
+        // Empty URL part means this isn't a valid definition
+        if url_part.is_empty() {
+            return None;
+        }
+
+        // URL can be:
+        // 1. Angle-bracketed URL: <url>
+        // 2. Bare URL (no spaces, ends at whitespace or end of line)
+        let (url, remaining) = if let Some(stripped) = url_part.strip_prefix('<') {
+            // Angle-bracketed URL
+            if let Some(end) = stripped.find('>') {
+                (&stripped[..end], &stripped[end + 1..])
+            } else {
+                return None; // Unclosed angle bracket
+            }
+        } else {
+            // Bare URL - take until whitespace
+            let end = url_part.find(char::is_whitespace).unwrap_or(url_part.len());
+            (&url_part[..end], &url_part[end..])
+        };
+
+        // Parse optional title
+        let remaining = remaining.trim_start();
+        let title = if remaining.is_empty() {
+            None
+        } else if let Some(stripped) = remaining.strip_prefix('"') {
+            stripped.find('"').map(|end| stripped[..end].to_string())
+        } else if let Some(stripped) = remaining.strip_prefix('\'') {
+            stripped.find('\'').map(|end| stripped[..end].to_string())
+        } else if let Some(stripped) = remaining.strip_prefix('(') {
+            stripped.find(')').map(|end| stripped[..end].to_string())
+        } else {
+            None
+        };
+
+        Some((label.to_string(), url.to_string(), title))
     }
 
     fn parse_list_item(&self, line: &str) -> Option<(usize, ListItemType)> {
@@ -1583,8 +1766,9 @@ impl StreamingParser {
                 }
             }
 
-            // Check for [text](url) hyperlinks
+            // Check for [text](url) hyperlinks or [text][ref]/[ref][]/[ref] reference links
             if chars[i] == '[' {
+                // First try inline link [text](url)
                 if let Some(link) = self.parse_link(&chars, i) {
                     // Process link text through format_inline to handle images, formatting, etc.
                     let formatted_text = self.format_inline(&link.text);
@@ -1598,6 +1782,13 @@ impl StreamingParser {
                     result.push_str("\u{001b}[0m");
                     result.push_str("\u{001b}]8;;\u{001b}\\");
                     i = link.end_pos;
+                    continue;
+                }
+
+                // Then try reference link [text][label], [label][], or [label]
+                if let Some(ref_link) = self.parse_reference_link(&chars, i) {
+                    result.push_str(&self.render_reference_link(&ref_link));
+                    i = ref_link.end_pos;
                     continue;
                 }
             }
@@ -1865,6 +2056,95 @@ impl StreamingParser {
             url,
             end_pos: url_end + 1,
         })
+    }
+
+    /// Parse a reference-style link: [text][label], [label][], or [label]
+    fn parse_reference_link(&self, chars: &[char], start: usize) -> Option<ReferenceLinkData> {
+        // Looking for [text][label], [label][], or [label]
+        // start points to '['
+
+        // Find the first closing ]
+        let text_end = self.find_closing("]", chars, start + 1)?;
+        let text: String = chars[start + 1..text_end].iter().collect();
+
+        // Empty text is not a valid reference link
+        if text.trim().is_empty() {
+            return None;
+        }
+
+        // Check what follows the first ]
+        let after_bracket = text_end + 1;
+
+        if after_bracket < chars.len() && chars[after_bracket] == '[' {
+            // Could be [text][label] or [label][]
+            let label_end = self.find_closing("]", chars, after_bracket + 1)?;
+            let label: String = chars[after_bracket + 1..label_end].iter().collect();
+
+            if label.is_empty() {
+                // Collapsed reference: [label][]
+                return Some(ReferenceLinkData {
+                    text: text.clone(),
+                    label: text,
+                    end_pos: label_end + 1,
+                });
+            } else {
+                // Full reference: [text][label]
+                return Some(ReferenceLinkData {
+                    text,
+                    label,
+                    end_pos: label_end + 1,
+                });
+            }
+        }
+
+        // Check if this is a shortcut reference [label]
+        // Must not be followed by [ or ( immediately
+        let is_shortcut = after_bracket >= chars.len()
+            || (chars[after_bracket] != '[' && chars[after_bracket] != '(');
+
+        if is_shortcut {
+            return Some(ReferenceLinkData {
+                text: text.clone(),
+                label: text,
+                end_pos: text_end + 1,
+            });
+        }
+
+        None
+    }
+
+    /// Render a reference link, either as a resolved hyperlink or as a citation
+    fn render_reference_link(&self, ref_link: &ReferenceLinkData) -> String {
+        let normalized_label = self.normalize_link_label(&ref_link.label);
+
+        // Check if we have a definition for this label
+        if let Some((url, _title)) = self.link_definitions.get(&normalized_label) {
+            // Definition found - render as normal OSC8 hyperlink
+            let formatted_text = self.format_inline(&ref_link.text);
+            format!(
+                "\u{001b}]8;;{}\u{001b}\\\u{001b}[34;4m{}\u{001b}[0m\u{001b}]8;;\u{001b}\\",
+                url, formatted_text
+            )
+        } else {
+            // No definition (yet) - use citation style
+            let citation_num = {
+                let mut num = self.next_citation_number.borrow_mut();
+                let current = *num;
+                *num += 1;
+                current
+            };
+
+            // Store for bibliography
+            self.pending_citations.borrow_mut().push((
+                citation_num,
+                ref_link.label.clone(),
+                ref_link.text.clone(),
+            ));
+
+            // Render as text[n]
+            let formatted_text = self.format_inline(&ref_link.text);
+            format!("{}[{}]", formatted_text, citation_num)
+        }
     }
 
     /// Parse an HTML tag and return formatted output
