@@ -117,7 +117,7 @@ mod html_tags {
     fn test_code_tag() {
         let p = parser();
         let result = p.format_inline("Hello <code>code</code>!");
-        assert!(result.contains("\x1b[48;5;235m")); // dark background
+        assert!(result.contains("\x1b[38;5;167;48;5;235m")); // red foreground, dark background
         assert_eq!(strip_ansi(&result), "Hello  code !");
     }
 
@@ -217,7 +217,7 @@ mod html_tags {
     fn test_pre_tag() {
         let p = parser();
         let result = p.format_inline("<pre>code block</pre>");
-        assert!(result.contains("\x1b[48;5;235m")); // dark background
+        assert!(result.contains("\x1b[38;5;167;48;5;235m")); // red foreground, dark background
     }
 }
 
