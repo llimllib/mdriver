@@ -590,16 +590,14 @@ mod image_inside_link {
     #[test]
     fn test_markdown_image_inside_link() {
         // [![alt](img-src)](link-url) pattern
-        // Note: This is a known limitation - nested markdown brackets don't parse correctly.
-        // The parser finds the first `]` instead of the matching one, so this becomes
-        // a link with text "![Badge" and URL from the image src.
-        // For proper nested image-in-link, use HTML: [<img src="..." alt="..."/>](url)
+        // The parser correctly handles nested brackets, extracting the image from the link text
+        // and the link URL from the outer structure.
         let p = parser();
         let result =
             p.format_inline("[![Badge](https://example.com/badge.svg)](https://example.com)");
         let stripped = strip_ansi(&result);
-        // Current behavior: parses as link with text "![Badge" and URL "https://example.com/badge.svg"
-        assert_eq!(stripped, "![Badge](https://example.com)");
+        // Link text contains the image (rendered as markdown since ImageProtocol::None)
+        assert_eq!(stripped, "![Badge](https://example.com/badge.svg)");
     }
 
     #[test]

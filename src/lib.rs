@@ -1472,6 +1472,19 @@ impl StreamingParser {
                                 i += 1;
                             }
                         }
+                        '_' => {
+                            // APC sequence: \x1b_...ST where ST is \x1b\\
+                            // Used for Kitty graphics protocol: \x1b_Gf=100,...;base64data\x1b\\
+                            i += 2;
+                            while i < chars.len() {
+                                if chars[i] == '\x1b' && i + 1 < chars.len() && chars[i + 1] == '\\'
+                                {
+                                    i += 2; // skip \x1b\\
+                                    break;
+                                }
+                                i += 1;
+                            }
+                        }
                         _ => {
                             // Unknown escape sequence, skip the ESC and next char
                             i += 2;
@@ -1539,6 +1552,24 @@ impl StreamingParser {
                                     // BEL is also a valid string terminator
                                     current_token.push(chars[i]);
                                     i += 1;
+                                    break;
+                                }
+                                current_token.push(chars[i]);
+                                i += 1;
+                            }
+                        }
+                        '_' => {
+                            // APC sequence: \x1b_...ST where ST is \x1b\\
+                            // Used for Kitty graphics protocol: \x1b_Gf=100,...;base64data\x1b\\
+                            current_token.push(chars[i]);
+                            current_token.push(chars[i + 1]);
+                            i += 2;
+                            while i < chars.len() {
+                                if chars[i] == '\x1b' && i + 1 < chars.len() && chars[i + 1] == '\\'
+                                {
+                                    current_token.push(chars[i]);
+                                    current_token.push(chars[i + 1]);
+                                    i += 2;
                                     break;
                                 }
                                 current_token.push(chars[i]);
@@ -1997,10 +2028,17 @@ impl StreamingParser {
         use image::ImageReader;
         use std::io::Cursor;
 
-        // Decode image
-        let img = ImageReader::new(Cursor::new(data))
-            .with_guessed_format()?
-            .decode()?;
+        // Check if data is SVG (XML-based vector graphics)
+        let is_svg = Self::is_svg(data);
+
+        let img = if is_svg {
+            self.render_svg(data)?
+        } else {
+            // Decode raster image
+            ImageReader::new(Cursor::new(data))
+                .with_guessed_format()?
+                .decode()?
+        };
 
         // Convert image pixel width to terminal columns
         // Assume ~9 pixels per terminal column (typical for monospace fonts)
@@ -2030,6 +2068,59 @@ impl StreamingParser {
         // Render using kitty protocol with display width in columns
         // Kitty will automatically calculate the row count to maintain aspect ratio
         Ok(self.render_kitty_image(&png_data, display_cols))
+    }
+
+    /// Check if data appears to be SVG content
+    fn is_svg(data: &[u8]) -> bool {
+        // Skip leading whitespace/BOM
+        let trimmed = match std::str::from_utf8(data) {
+            Ok(s) => s.trim_start(),
+            Err(_) => return false, // SVG must be valid UTF-8
+        };
+
+        // Check for common SVG signatures
+        trimmed.starts_with("<?xml")
+            || trimmed.starts_with("<svg")
+            || trimmed.starts_with("<!DOCTYPE svg")
+    }
+
+    /// Render SVG to a raster image using resvg
+    fn render_svg(&self, data: &[u8]) -> Result<image::DynamicImage, Box<dyn std::error::Error>> {
+        use resvg::tiny_skia::Pixmap;
+        use resvg::usvg::{fontdb, Options, Tree};
+
+        // Load system fonts for text rendering
+        let mut fontdb = fontdb::Database::new();
+        fontdb.load_system_fonts();
+
+        let opts = Options {
+            fontdb: std::sync::Arc::new(fontdb),
+            ..Options::default()
+        };
+
+        let svg_str = std::str::from_utf8(data)?;
+        let tree = Tree::from_str(svg_str, &opts)?;
+
+        let size = tree.size();
+        let width = size.width() as u32;
+        let height = size.height() as u32;
+
+        // Create pixmap for rendering
+        let mut pixmap =
+            Pixmap::new(width, height).ok_or("Failed to create pixmap for SVG rendering")?;
+
+        // Render SVG to pixmap
+        resvg::render(
+            &tree,
+            resvg::tiny_skia::Transform::default(),
+            &mut pixmap.as_mut(),
+        );
+
+        // Convert to image::DynamicImage
+        let img = image::RgbaImage::from_raw(width, height, pixmap.take())
+            .ok_or("Failed to create image from SVG pixels")?;
+
+        Ok(image::DynamicImage::ImageRgba8(img))
     }
 
     fn render_kitty_image(&self, png_data: &[u8], columns: usize) -> String {
@@ -2062,8 +2153,6 @@ impl StreamingParser {
             }
         }
 
-        // Add newline after image
-        output.push('\n');
         output
     }
 
@@ -2513,18 +2602,44 @@ impl StreamingParser {
         let marker_chars: Vec<char> = marker.chars().collect();
         let marker_len = marker_chars.len();
 
+        // Track bracket nesting for balanced matching
+        let mut bracket_depth = 0; // for [ ]
+        let mut paren_depth = 0; // for ( )
+
         let mut i = start;
         while i + marker_len <= chars.len() {
-            let mut matches = true;
-            for (j, &mc) in marker_chars.iter().enumerate() {
-                if chars[i + j] != mc {
-                    matches = false;
-                    break;
+            let c = chars[i];
+
+            // Check for match BEFORE updating depth
+            // This ensures we match the closing bracket at depth 0
+            let at_balanced_depth = match marker {
+                "]" => bracket_depth == 0 && c == ']',
+                ")" => paren_depth == 0 && c == ')',
+                _ => true, // For other markers, don't require balancing
+            };
+
+            if at_balanced_depth {
+                let mut matches = true;
+                for (j, &mc) in marker_chars.iter().enumerate() {
+                    if chars[i + j] != mc {
+                        matches = false;
+                        break;
+                    }
+                }
+                if matches {
+                    return Some(i);
                 }
             }
-            if matches {
-                return Some(i);
+
+            // Update nesting depth AFTER checking for match
+            match c {
+                '[' => bracket_depth += 1,
+                ']' if bracket_depth > 0 => bracket_depth -= 1,
+                '(' => paren_depth += 1,
+                ')' if paren_depth > 0 => paren_depth -= 1,
+                _ => {}
             }
+
             i += 1;
         }
         None
