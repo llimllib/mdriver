@@ -1268,6 +1268,34 @@ impl StreamingParser {
         output
     }
 
+    /// Parse a task list item marker at the start of content.
+    /// Returns Some((is_checked, remaining_content)) if a task list marker is found.
+    /// Task list markers are: [ ] (unchecked) or [x]/[X] (checked), followed by whitespace.
+    fn parse_task_list_marker<'a>(&self, content: &'a str) -> Option<(bool, &'a str)> {
+        let trimmed = content.trim_start();
+
+        // Check for [ ] (unchecked)
+        if let Some(rest) = trimmed.strip_prefix("[ ]") {
+            // Must be followed by at least one whitespace
+            if rest.starts_with(' ') || rest.starts_with('\t') {
+                return Some((false, rest.trim_start()));
+            }
+        }
+
+        // Check for [x] or [X] (checked)
+        if let Some(rest) = trimmed
+            .strip_prefix("[x]")
+            .or_else(|| trimmed.strip_prefix("[X]"))
+        {
+            // Must be followed by at least one whitespace
+            if rest.starts_with(' ') || rest.starts_with('\t') {
+                return Some((true, rest.trim_start()));
+            }
+        }
+
+        None
+    }
+
     fn format_list(&self, items: &[(usize, ListItemType, String)]) -> String {
         let mut output = String::new();
         // Track numbering for each nesting level
@@ -1290,11 +1318,24 @@ impl StreamingParser {
                 trimmed
             };
 
-            let formatted_content = self.format_inline(content);
-
             // Use indentation level to determine nesting (each 4 spaces = 1 level)
             let nesting_level = indent_level / 4;
             let indent = "  ".repeat(nesting_level);
+
+            // Check for task list item marker and handle specially
+            if let Some((is_checked, remaining)) = self.parse_task_list_marker(content) {
+                // Task list item: use checkbox as the marker (no bullet)
+                let checkbox = if is_checked { "☑" } else { "☐" };
+                let formatted_content = self.format_inline(remaining);
+                let first_indent = format!("{}  {} ", indent, checkbox);
+                let cont_indent = format!("{}    ", indent); // align with content after checkbox
+                let wrapped = self.wrap_text(&formatted_content, &first_indent, &cont_indent);
+                output.push_str(&wrapped);
+                output.push('\n');
+                continue;
+            }
+
+            let formatted_content = self.format_inline(content);
 
             // Format based on item type, with wrapping
             match item_type {
