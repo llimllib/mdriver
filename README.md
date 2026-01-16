@@ -16,7 +16,13 @@ _Warning_: I wrote this code as an experiment in LLM development. I do not speak
 
 ## Installation
 
-### From crates.io (Recommended)
+### Using Homebrew (macOS)
+
+```bash
+brew install llimllib/tap/mdriver
+```
+
+### From crates.io
 
 ```bash
 cargo install mdriver

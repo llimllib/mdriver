@@ -65,17 +65,42 @@ release:
   name_template: "v{{ .Version }}"
   header: |
     ## mdriver {{ .Tag }}
-    
+
     Streaming markdown printer for the terminal with syntax highlighting.
-    
+
     ### Installation
-    
+
     ```bash
+    # Using Homebrew (macOS)
+    brew install llimllib/tap/mdriver
+
     # Using cargo
     cargo install mdriver
-    
+
     # Or download binary from below
     ```
+
+homebrew_casks:
+  - name: mdriver
+    repository:
+      owner: llimllib
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
+    homepage: "https://github.com/llimllib/mdriver"
+    description: "Streaming markdown printer for the terminal with syntax highlighting"
+    url:
+      verified: "github.com/llimllib/mdriver"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/mdriver"]
+          end
 
 announce:
   skip: "true"
