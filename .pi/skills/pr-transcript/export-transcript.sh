@@ -27,7 +27,7 @@ if [[ ! -d "$SESSION_DIR" ]]; then
 fi
 
 # Find the most recent session file
-SESSION_FILE=$(ls -t "$SESSION_DIR"/*.jsonl 2>/dev/null | head -1)
+SESSION_FILE=$(find "$SESSION_DIR" -maxdepth 1 -name "*.jsonl" -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -1)
 
 if [[ -z "$SESSION_FILE" ]]; then
     echo "Error: No session files found in $SESSION_DIR"
