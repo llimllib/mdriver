@@ -1,0 +1,81 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# GoReleaser config for mdriver (Rust project)
+#
+# Uses cargo-zigbuild for cross-compilation.
+# Run with: goreleaser release --clean
+# For local testing: goreleaser release --snapshot --clean
+
+version: 2
+
+project_name: mdriver
+
+before:
+  hooks:
+    - cargo fmt --check
+    - cargo clippy --all-targets --all-features -- -D warnings
+    - cargo test
+
+builds:
+  - id: mdriver
+    builder: rust
+    targets:
+      - x86_64-unknown-linux-gnu
+      - x86_64-apple-darwin
+      - aarch64-apple-darwin
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE*
+      - CHANGELOG.md
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore\\(deps\\):"
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: "Features"
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "Bug fixes"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: "Other"
+      order: 999
+
+release:
+  github:
+    owner: llimllib
+    name: mdriver
+  draft: false
+  prerelease: auto
+  name_template: "v{{ .Version }}"
+  header: |
+    ## mdriver {{ .Tag }}
+    
+    Streaming markdown printer for the terminal with syntax highlighting.
+    
+    ### Installation
+    
+    ```bash
+    # Using cargo
+    cargo install mdriver
+    
+    # Or download binary from below
+    ```
+
+announce:
+  skip: "true"

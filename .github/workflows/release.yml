@@ -5,58 +5,44 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+  id-token: write
+
 jobs:
-  build:
-    name: Build ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - os: macos-latest
-            target: x86_64-apple-darwin
-          - os: macos-latest
-            target: aarch64-apple-darwin
-
-    steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Install target
-        run: rustup target add ${{ matrix.target }}
-
-      - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Package binary
-        run: |
-          cd "target/${{ matrix.target }}/release"
-          tar czf "mdriver-${{ matrix.target }}.tar.gz" mdriver
-          mv "mdriver-${{ matrix.target }}.tar.gz" "$GITHUB_WORKSPACE/"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: mdriver-${{ matrix.target }}
-          path: mdriver-${{ matrix.target }}.tar.gz
-
-  release:
-    needs: build
+  goreleaser:
+    name: GoReleaser
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu,x86_64-apple-darwin,aarch64-apple-darwin
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-crates:
+    needs: goreleaser
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/download-artifact@v6
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: mdriver-*/mdriver-*.tar.gz
-          generate_release_notes: true
 
       - name: Authenticate with crates.io
         id: crates-io-auth

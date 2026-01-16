@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Automated release workflow: bumps version, updates changelog, commits, and tags
+# Automated release workflow: bumps version, commits, and tags
 # Usage: ./tools/release.sh
-# Interactive prompts:
-#   1. Bump type (major/minor/patch) - calculates new semantic version
-#   2. Optional CHANGELOG.md edit
-#   3. Release/tag message
+#
+# GoReleaser handles changelog generation from git commits,
+# so we no longer manually update CHANGELOG.md
 
-# Extract current version from Cargo.toml and prompt for bump type
+# Extract current version from Cargo.toml
 CURRENT=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
 echo "Current version: $CURRENT"
 read -rp "Bump type (major/minor/patch): " BUMP
@@ -29,51 +28,40 @@ esac
 echo "New version: $NEW_VERSION"
 echo ""
 
-# Get the latest tag
+# Show commits since last tag
 LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-
-# Get commit messages since last tag (or all commits if no tag exists)
 if [ -n "$LATEST_TAG" ]; then
-	COMMITS=$(git log --pretty=format:"- %s" "$LATEST_TAG"..HEAD --no-merges)
-else
-	COMMITS=$(git log --pretty=format:"- %s" --no-merges)
-fi
-
-if [ -z "$COMMITS" ]; then
-	echo "No new commits since $LATEST_TAG"
-	exit 1
-fi
-
-echo "=== Changes to be added to changelog ==="
-echo "$COMMITS"
-echo ""
-
-# Insert commits into CHANGELOG.md after the [Unreleased] header
-# Create a temp file with the new content
-{
-	sed -n '1,/^## \[Unreleased\]/p' CHANGELOG.md
+	echo "=== Commits since $LATEST_TAG ==="
+	git log --pretty=format:"- %s" "$LATEST_TAG"..HEAD --no-merges
 	echo ""
-	echo "$COMMITS"
-	sed -n '/^## \[Unreleased\]/,$p' CHANGELOG.md | sed '1d'
-} > CHANGELOG.md.tmp
-mv CHANGELOG.md.tmp CHANGELOG.md
-
-# Update CHANGELOG.md: add new version header and update comparison links
-DATE=$(date +%Y-%m-%d)
-sed -i.bak "s/^## \[Unreleased\]/## [Unreleased]\n\n## [$NEW_VERSION] - $DATE/" CHANGELOG.md
-sed -i.bak "s|\[Unreleased\]: .*/compare/v.*\.\.\.HEAD|[Unreleased]: https://github.com/llimllib/mdriver/compare/v$NEW_VERSION...HEAD\n[$NEW_VERSION]: https://github.com/llimllib/mdriver/compare/v$CURRENT...v$NEW_VERSION|" CHANGELOG.md
-rm CHANGELOG.md.bak
+	echo ""
+fi
 
 # Update version in Cargo.toml
 sed -i.bak "s/^version = \"$CURRENT\"/version = \"$NEW_VERSION\"/" Cargo.toml
 rm Cargo.toml.bak
 
-# Commit, tag, and push
-read -rp "Enter release/tag message: " MESSAGE
-git add Cargo.toml CHANGELOG.md
+# Run checks before committing
+echo "Running cargo fmt..."
+cargo fmt
+
+echo "Running cargo clippy..."
+cargo clippy --all-targets --all-features -- -D warnings
+
+echo "Running cargo test..."
+cargo test
+
+# Commit and tag
+read -rp "Enter release message (or press enter for default): " MESSAGE
+MESSAGE="${MESSAGE:-Release v$NEW_VERSION}"
+
+git add Cargo.toml
 git commit -m "chore: bump version to $NEW_VERSION"
-git pull
-git tag -a "v$NEW_VERSION" -m "$MESSAGE" && git push && git push --tags
+git pull --rebase
+git tag -a "v$NEW_VERSION" -m "$MESSAGE"
+git push
+git push --tags
 
 echo ""
-echo "✓ Released version $NEW_VERSION"
+echo "✓ Tagged version v$NEW_VERSION"
+echo "✓ GitHub Actions will now build and release via GoReleaser"
