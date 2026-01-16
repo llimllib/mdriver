@@ -29,16 +29,34 @@ esac
 echo "New version: $NEW_VERSION"
 echo ""
 
-# Show current unreleased changes from CHANGELOG.md
-echo "=== Current Unreleased changes ==="
-sed -n '/## \[Unreleased\]/,/## \[/p' CHANGELOG.md | sed '$d' | tail -n +2
+# Get the latest tag
+LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+# Get commit messages since last tag (or all commits if no tag exists)
+if [ -n "$LATEST_TAG" ]; then
+	COMMITS=$(git log --pretty=format:"- %s" "$LATEST_TAG"..HEAD --no-merges)
+else
+	COMMITS=$(git log --pretty=format:"- %s" --no-merges)
+fi
+
+if [ -z "$COMMITS" ]; then
+	echo "No new commits since $LATEST_TAG"
+	exit 1
+fi
+
+echo "=== Changes to be added to changelog ==="
+echo "$COMMITS"
 echo ""
 
-# Optionally open editor to update changelog
-read -rp "Edit CHANGELOG.md now? (y/N): " EDIT_CHANGELOG
-if [ "$EDIT_CHANGELOG" = "y" ] || [ "$EDIT_CHANGELOG" = "Y" ]; then
-	${EDITOR:-vi} CHANGELOG.md
-fi
+# Insert commits into CHANGELOG.md after the [Unreleased] header
+# Create a temp file with the new content
+{
+	sed -n '1,/^## \[Unreleased\]/p' CHANGELOG.md
+	echo ""
+	echo "$COMMITS"
+	sed -n '/^## \[Unreleased\]/,${/^## \[Unreleased\]/d;p}' CHANGELOG.md
+} > CHANGELOG.md.tmp
+mv CHANGELOG.md.tmp CHANGELOG.md
 
 # Update CHANGELOG.md: add new version header and update comparison links
 DATE=$(date +%Y-%m-%d)
