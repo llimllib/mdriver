@@ -1052,3 +1052,153 @@ mod wrap_image_tests {
         assert!(result.contains("![alt](https://example.com/img.png)"));
     }
 }
+
+mod task_list_tests {
+    use super::*;
+
+    #[test]
+    fn test_unchecked_task_list_item() {
+        // Unchecked task list items should render with ☐
+        let mut p = parser();
+        let mut output = p.feed("- [ ] open TODO\n\n");
+        output.push_str(&p.flush());
+        let stripped = strip_ansi(&output);
+        assert!(
+            stripped.contains("☐ open TODO"),
+            "Expected unchecked box, got: {}",
+            stripped
+        );
+        // Should NOT contain citation-style [1] since it's not a reference link
+        assert!(
+            !stripped.contains("[1]"),
+            "Should not be treated as reference link: {}",
+            stripped
+        );
+    }
+
+    #[test]
+    fn test_checked_task_list_item_lowercase() {
+        // Checked task list items with lowercase x should render with ☑
+        let mut p = parser();
+        let mut output = p.feed("- [x] completed TODO\n\n");
+        output.push_str(&p.flush());
+        let stripped = strip_ansi(&output);
+        assert!(
+            stripped.contains("☑ completed TODO"),
+            "Expected checked box, got: {}",
+            stripped
+        );
+        // Should NOT contain citation-style [1]
+        assert!(
+            !stripped.contains("[1]"),
+            "Should not be treated as reference link: {}",
+            stripped
+        );
+    }
+
+    #[test]
+    fn test_checked_task_list_item_uppercase() {
+        // Checked task list items with uppercase X should render with ☑
+        let mut p = parser();
+        let mut output = p.feed("- [X] completed TODO\n\n");
+        output.push_str(&p.flush());
+        let stripped = strip_ansi(&output);
+        assert!(
+            stripped.contains("☑ completed TODO"),
+            "Expected checked box, got: {}",
+            stripped
+        );
+    }
+
+    #[test]
+    fn test_multiple_task_list_items() {
+        // Multiple task list items in the same list
+        let mut p = parser();
+        let mut output = p.feed(
+            "- [x] completed TODO\n- [x] another completed TODO\n- [ ] open TODO\n- [ ] bananas\n\n",
+        );
+        output.push_str(&p.flush());
+        let stripped = strip_ansi(&output);
+        assert!(
+            stripped.contains("☑ completed TODO"),
+            "First completed item missing: {}",
+            stripped
+        );
+        assert!(
+            stripped.contains("☑ another completed TODO"),
+            "Second completed item missing: {}",
+            stripped
+        );
+        assert!(
+            stripped.contains("☐ open TODO"),
+            "First open item missing: {}",
+            stripped
+        );
+        assert!(
+            stripped.contains("☐ bananas"),
+            "Second open item missing: {}",
+            stripped
+        );
+    }
+
+    #[test]
+    fn test_task_list_with_plus_marker() {
+        // Task list items can use + marker too
+        let mut p = parser();
+        let mut output = p.feed("+ [x] completed\n+ [ ] open\n\n");
+        output.push_str(&p.flush());
+        let stripped = strip_ansi(&output);
+        assert!(stripped.contains("☑ completed"), "Expected checked box");
+        assert!(stripped.contains("☐ open"), "Expected unchecked box");
+    }
+
+    #[test]
+    fn test_task_list_with_asterisk_marker() {
+        // Task list items can use * marker too
+        let mut p = parser();
+        let mut output = p.feed("* [x] completed\n* [ ] open\n\n");
+        output.push_str(&p.flush());
+        let stripped = strip_ansi(&output);
+        assert!(stripped.contains("☑ completed"), "Expected checked box");
+        assert!(stripped.contains("☐ open"), "Expected unchecked box");
+    }
+
+    #[test]
+    fn test_regular_list_item_not_affected() {
+        // Regular list items (not task lists) should still work
+        let mut p = parser();
+        let mut output = p.feed("- regular item\n- another item\n\n");
+        output.push_str(&p.flush());
+        let stripped = strip_ansi(&output);
+        // Should not have checkbox characters
+        assert!(
+            !stripped.contains("☐"),
+            "Regular item should not have checkbox"
+        );
+        assert!(
+            !stripped.contains("☑"),
+            "Regular item should not have checkbox"
+        );
+        assert!(
+            stripped.contains("regular item"),
+            "Content should be present"
+        );
+    }
+
+    #[test]
+    fn test_task_list_requires_space_after_bracket() {
+        // [x] must be followed by whitespace to be a task list marker
+        // Otherwise it's just text that might look like a reference
+        let mut p = parser();
+        let mut output = p.feed("- [x]no space here\n\n");
+        output.push_str(&p.flush());
+        let stripped = strip_ansi(&output);
+        // This should NOT be treated as a task list item
+        // The [x] without space is treated as regular content
+        assert!(
+            !stripped.contains("☑"),
+            "Without space after bracket, should not be task list: {}",
+            stripped
+        );
+    }
+}
