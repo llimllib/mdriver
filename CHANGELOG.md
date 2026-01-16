@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-01-15
+
+- feat: auto-populate changelog and add shellcheck CI (#19)
+- feat: add SVG image support via resvg (#18)
+- fix: preserve image aspect ratio by letting Kitty calculate row count (#17)
+- fix: prevent image markdown from being broken by line wrapping (#16)
+- fix: use configured width for horizontal rules instead of terminal detection (#15)
+- feat: strip HTML comments from markdown output (#14)
+- feat: add citation-style reference link support (#13)
+- feat: fix image-inside-link bug and add parallel image prefetching (#12)
+- feat: add HTML <img> tag support and fix kitty image sizing (#11)
+- feat: add HTML entity support (#10)
+- feat: add red foreground color to inline code for better visibility (#9)
+
 ## [0.8.0] - 2026-01-12
 
 ## [0.8.0] - 2026-01-12
@@ -155,7 +169,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ANSI color output for terminal rendering
 - Comprehensive conformance test suite (TOML-based fixtures)
 
-[Unreleased]: https://github.com/llimllib/mdriver/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/llimllib/mdriver/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/llimllib/mdriver/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/llimllib/mdriver/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/llimllib/mdriver/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/llimllib/mdriver/compare/v0.6.0...v0.6.1
