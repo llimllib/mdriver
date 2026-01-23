@@ -6,6 +6,7 @@ use syntect::easy::HighlightLines;
 use syntect::parsing::SyntaxSet;
 use syntect::util::as_24_bit_terminal_escaped;
 use two_face::theme::{EmbeddedLazyThemeSet, EmbeddedThemeName};
+use unicode_width::UnicodeWidthStr;
 
 // Static theme set using two-face's extended themes
 static THEME_SET: LazyLock<EmbeddedLazyThemeSet> = LazyLock::new(two_face::theme::extra);
@@ -1553,12 +1554,18 @@ impl StreamingParser {
         result
     }
 
+    /// Calculate the display width of text after stripping ANSI codes.
+    /// Uses Unicode width to properly handle wide characters (like emoji and CJK).
+    pub fn display_width(&self, text: &str) -> usize {
+        self.strip_ansi(text).width()
+    }
+
     /// Wrap text to self.width, preserving ANSI codes and not breaking words.
     /// `first_indent` is prepended to the first line, `cont_indent` to continuation lines.
     /// Long words that exceed width are kept whole on their own line.
     pub fn wrap_text(&self, text: &str, first_indent: &str, cont_indent: &str) -> String {
-        let first_indent_width = first_indent.chars().count();
-        let cont_indent_width = cont_indent.chars().count();
+        let first_indent_width = first_indent.width();
+        let cont_indent_width = cont_indent.width();
 
         // Split text into "tokens" preserving ANSI codes with adjacent words
         // We need to split on whitespace while preserving the ANSI codes
@@ -1704,7 +1711,7 @@ impl StreamingParser {
         let mut is_first_line = true;
 
         for token in tokens {
-            let token_width = self.strip_ansi(&token).chars().count();
+            let token_width = self.display_width(&token);
 
             // Check if we need to wrap
             if current_width
@@ -1746,7 +1753,7 @@ impl StreamingParser {
     }
 
     fn align_cell(&self, content: &str, width: usize, alignment: Alignment) -> String {
-        let visible_len = self.strip_ansi(content).chars().count();
+        let visible_len = self.display_width(content);
 
         if visible_len >= width {
             return content.to_string();
@@ -1789,16 +1796,16 @@ impl StreamingParser {
 
         let mut col_widths = vec![0; num_cols];
 
-        // Measure header (with inline formatting stripped)
+        // Measure header (with inline formatting stripped, using Unicode width)
         for (i, cell) in header.iter().enumerate() {
-            col_widths[i] = self.strip_ansi(cell).chars().count();
+            col_widths[i] = self.strip_ansi(cell).width();
         }
 
         // Measure all data rows
         for row in rows {
             for (i, cell) in row.iter().enumerate() {
                 if i < num_cols {
-                    let width = self.strip_ansi(cell).chars().count();
+                    let width = self.strip_ansi(cell).width();
                     col_widths[i] = col_widths[i].max(width);
                 }
             }

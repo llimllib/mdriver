@@ -1202,3 +1202,92 @@ mod task_list_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod unicode_width {
+    use mdriver::ImageProtocol;
+    use mdriver::StreamingParser;
+    use unicode_width::UnicodeWidthChar;
+
+    /// Get the visual column positions of pipe characters in a line.
+    /// Uses Unicode width to properly account for wide characters.
+    fn get_pipe_visual_positions(line: &str) -> Vec<usize> {
+        let mut positions = Vec::new();
+        let mut visual_col = 0;
+
+        for c in line.chars() {
+            if c == '│' {
+                positions.push(visual_col);
+            }
+            // Add the display width of the character
+            visual_col += c.width().unwrap_or(0);
+        }
+
+        positions
+    }
+
+    #[test]
+    fn test_table_with_emoji() {
+        let mut parser = StreamingParser::with_width("base16-ocean.dark", ImageProtocol::None, 80);
+
+        parser.feed("| Method | Status |\n");
+        parser.feed("|--------|--------|\n");
+        parser.feed("| yaml   | ✅      |\n");
+        parser.feed("| env    | ❌      |\n");
+        let output = parser.feed("\n") + &parser.flush();
+
+        // Count the pipe characters on each row - they should be vertically aligned
+        let lines: Vec<&str> = output.lines().collect();
+
+        // Get the visual column position of each pipe on lines that contain table content
+        // Header row and data rows should have pipes at the same visual positions
+        let pipe_positions: Vec<Vec<usize>> = lines
+            .iter()
+            .filter(|line| line.contains('│'))
+            .map(|line| get_pipe_visual_positions(line))
+            .collect();
+
+        println!("Table output:\n{}", output);
+        println!("Pipe visual positions: {:?}", pipe_positions);
+
+        // All rows should have the same pipe positions for proper alignment
+        if !pipe_positions.is_empty() {
+            let first = &pipe_positions[0];
+            for (i, positions) in pipe_positions.iter().enumerate() {
+                assert_eq!(first, positions, "Row {} has misaligned pipes", i);
+            }
+        }
+    }
+
+    #[test]
+    fn test_table_from_issue_28() {
+        let mut parser = StreamingParser::with_width("base16-ocean.dark", ImageProtocol::None, 80);
+
+        parser.feed("| Method                | Encrypted | Easy Setup | Team Sharing |\n");
+        parser.feed("|-----------------------|-----------|------------|--------------|\n");
+        parser.feed("| .secrets.local.yaml   | Optional  | ✅          | ❌            |\n");
+        parser.feed("| Environment variables | ❌         | ✅          | ❌            |\n");
+        parser.feed("| Local directory       | Optional  | ✅          | ❌            |\n");
+        let output = parser.feed("\n") + &parser.flush();
+
+        let lines: Vec<&str> = output.lines().collect();
+
+        // Get the visual column position of each pipe on lines that contain table content
+        let pipe_positions: Vec<Vec<usize>> = lines
+            .iter()
+            .filter(|line| line.contains('│'))
+            .map(|line| get_pipe_visual_positions(line))
+            .collect();
+
+        println!("Table output:\n{}", output);
+        println!("Pipe visual positions: {:?}", pipe_positions);
+
+        // All rows should have the same pipe positions for proper alignment
+        if !pipe_positions.is_empty() {
+            let first = &pipe_positions[0];
+            for (i, positions) in pipe_positions.iter().enumerate() {
+                assert_eq!(first, positions, "Row {} has misaligned pipes", i);
+            }
+        }
+    }
+}
