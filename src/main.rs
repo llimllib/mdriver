@@ -194,6 +194,8 @@ fn run() -> io::Result<()> {
         Box::new(io::stdin())
     };
 
+    let mut stdout = io::stdout().lock();
+
     if use_color {
         // Get theme from parameter, environment variable, or use default
         let theme = theme
@@ -218,15 +220,14 @@ fn run() -> io::Result<()> {
 
             let chunk = String::from_utf8_lossy(&buffer[..bytes_read]);
             let output = parser.feed(&chunk);
-            print!("{}", output);
+            write!(stdout, "{}", output)?;
         }
 
         // Flush any remaining buffered content
         let output = parser.flush();
-        print!("{}", output);
+        write!(stdout, "{}", output)?;
     } else {
         // Passthrough mode: act like cat, no formatting
-        let mut stdout = io::stdout().lock();
         loop {
             let bytes_read = reader.read(&mut buffer)?;
             if bytes_read == 0 {
