@@ -71,6 +71,16 @@ enum ListItemType {
     Ordered,
 }
 
+/// Callout type for GitHub-style alerts
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum CalloutType {
+    Note,
+    Tip,
+    Important,
+    Warning,
+    Caution,
+}
+
 /// Image protocol for rendering images
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ImageProtocol {
@@ -1861,7 +1871,58 @@ impl StreamingParser {
         output
     }
 
+    /// Try to parse a callout type from the first line of a blockquote.
+    /// Callouts start with `[!TYPE]` where TYPE is NOTE, TIP, IMPORTANT, WARNING, or CAUTION.
+    fn parse_callout_type(&self, first_line: &str) -> Option<CalloutType> {
+        let trimmed = first_line.trim();
+
+        // Check for [!TYPE] pattern at the start
+        if !trimmed.starts_with("[!") {
+            return None;
+        }
+
+        // Find the closing bracket
+        let end = trimmed.find(']')?;
+        let type_str = &trimmed[2..end];
+
+        match type_str.to_uppercase().as_str() {
+            "NOTE" => Some(CalloutType::Note),
+            "TIP" => Some(CalloutType::Tip),
+            "IMPORTANT" => Some(CalloutType::Important),
+            "WARNING" => Some(CalloutType::Warning),
+            "CAUTION" => Some(CalloutType::Caution),
+            _ => None,
+        }
+    }
+
+    /// Get the display properties for a callout type: (icon, name, ANSI color code)
+    fn callout_style(
+        &self,
+        callout_type: CalloutType,
+    ) -> (&'static str, &'static str, &'static str) {
+        match callout_type {
+            // Blue for informational notes
+            CalloutType::Note => ("ℹ", "Note", "\u{001b}[34m"),
+            // Green for helpful tips
+            CalloutType::Tip => ("💡", "Tip", "\u{001b}[32m"),
+            // Purple/magenta for important information
+            CalloutType::Important => ("❗", "Important", "\u{001b}[35m"),
+            // Yellow for warnings
+            CalloutType::Warning => ("⚠", "Warning", "\u{001b}[33m"),
+            // Red for critical cautions
+            CalloutType::Caution => ("🛑", "Caution", "\u{001b}[31m"),
+        }
+    }
+
     fn format_blockquote(&self, lines: &[(usize, String)]) -> String {
+        // Check if this is a callout (first line starts with [!TYPE])
+        if let Some((_, first_content)) = lines.first() {
+            if let Some(callout_type) = self.parse_callout_type(first_content) {
+                return self.format_callout(callout_type, lines);
+            }
+        }
+
+        // Regular blockquote formatting
         let mut output = String::new();
 
         for (nesting_level, content) in lines {
@@ -1878,6 +1939,59 @@ impl StreamingParser {
         }
 
         // Add blank line after blockquote
+        output.push('\n');
+
+        output
+    }
+
+    /// Format a callout (GitHub-style alert) with colored styling
+    fn format_callout(&self, callout_type: CalloutType, lines: &[(usize, String)]) -> String {
+        let mut output = String::new();
+        let (icon, name, color) = self.callout_style(callout_type);
+        let reset = "\u{001b}[0m";
+
+        // Build the colored bar prefix
+        let bar = format!("{} │ {}", color, reset);
+
+        // Output header line with icon and type name (bold + colored)
+        output.push_str(&format!(
+            "{} │ {}\u{001b}[1m{} {}{}\n",
+            color, reset, color, icon, reset
+        ));
+        output.push_str(&format!(
+            "{} │ {}\u{001b}[1m{}{}{}\n",
+            color, reset, color, name, reset
+        ));
+
+        // Process content lines (skip the [!TYPE] marker from first line)
+        let mut content_lines: Vec<String> = Vec::new();
+        for (i, (_, content)) in lines.iter().enumerate() {
+            if i == 0 {
+                // First line: strip the [!TYPE] marker
+                let trimmed = content.trim();
+                if let Some(end_bracket) = trimmed.find(']') {
+                    let after_marker = trimmed[end_bracket + 1..].trim();
+                    if !after_marker.is_empty() {
+                        content_lines.push(after_marker.to_string());
+                    }
+                }
+            } else {
+                content_lines.push(content.clone());
+            }
+        }
+
+        // Join content and format
+        if !content_lines.is_empty() {
+            let combined = content_lines.join(" ");
+            let formatted_content = self.format_inline(&combined);
+
+            // Wrap with the colored bar as prefix
+            let wrapped = self.wrap_text(&formatted_content, &bar, &bar);
+            output.push_str(&wrapped);
+            output.push('\n');
+        }
+
+        // Add blank line after callout
         output.push('\n');
 
         output

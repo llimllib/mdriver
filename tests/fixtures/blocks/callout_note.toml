@@ -1,0 +1,14 @@
+name = "callout-note"
+description = "GitHub-style NOTE callout with colored bar and icon"
+
+[[chunks]]
+input = "> [!NOTE]\n"
+emit = ""
+
+[[chunks]]
+input = "> This is a note.\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = "\u001b[34m │ \u001b[0m\u001b[1m\u001b[34m ℹ\u001b[0m\n\u001b[34m │ \u001b[0m\u001b[1m\u001b[34mNote\u001b[0m\n\u001b[34m │ \u001b[0mThis is a note.\n\n"

@@ -1,0 +1,27 @@
+name = "callout-all-types"
+description = "All five GitHub-style callout types with their colors"
+
+# NOTE (blue)
+[[chunks]]
+input = "> [!NOTE]\n> A note.\n\n"
+emit = "\u001b[34m │ \u001b[0m\u001b[1m\u001b[34m ℹ\u001b[0m\n\u001b[34m │ \u001b[0m\u001b[1m\u001b[34mNote\u001b[0m\n\u001b[34m │ \u001b[0mA note.\n\n"
+
+# TIP (green)
+[[chunks]]
+input = "> [!TIP]\n> A tip.\n\n"
+emit = "\u001b[32m │ \u001b[0m\u001b[1m\u001b[32m 💡\u001b[0m\n\u001b[32m │ \u001b[0m\u001b[1m\u001b[32mTip\u001b[0m\n\u001b[32m │ \u001b[0mA tip.\n\n"
+
+# IMPORTANT (purple/magenta)
+[[chunks]]
+input = "> [!IMPORTANT]\n> Important info.\n\n"
+emit = "\u001b[35m │ \u001b[0m\u001b[1m\u001b[35m ❗\u001b[0m\n\u001b[35m │ \u001b[0m\u001b[1m\u001b[35mImportant\u001b[0m\n\u001b[35m │ \u001b[0mImportant info.\n\n"
+
+# WARNING (yellow)
+[[chunks]]
+input = "> [!WARNING]\n> A warning.\n\n"
+emit = "\u001b[33m │ \u001b[0m\u001b[1m\u001b[33m ⚠\u001b[0m\n\u001b[33m │ \u001b[0m\u001b[1m\u001b[33mWarning\u001b[0m\n\u001b[33m │ \u001b[0mA warning.\n\n"
+
+# CAUTION (red)
+[[chunks]]
+input = "> [!CAUTION]\n> A caution.\n\n"
+emit = "\u001b[31m │ \u001b[0m\u001b[1m\u001b[31m 🛑\u001b[0m\n\u001b[31m │ \u001b[0m\u001b[1m\u001b[31mCaution\u001b[0m\n\u001b[31m │ \u001b[0mA caution.\n\n"
