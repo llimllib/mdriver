@@ -79,6 +79,9 @@ mdriver --list-themes
 # Render images using kitty graphics protocol
 mdriver --images kitty document.md
 
+# Control color output (auto, always, never)
+mdriver --color=always README.md | less -R
+
 # Show help
 mdriver --help
 ```
@@ -106,6 +109,7 @@ Output (with ANSI colors in your terminal):
 - ✅ **Image Rendering**: `![alt](src)` with kitty graphics protocol support
 - ✅ **Syntax Highlighting**: 100+ languages supported with customizable themes
 - ✅ **ANSI Colors**: Beautiful terminal output with 24-bit true color
+- ✅ **Color Control**: Auto-detect, always, or never modes for flexible output
 - ✅ **Zero Warnings**: Strict clippy linting, no compiler warnings
 
 ## Syntax Highlighting Themes
@@ -192,6 +196,55 @@ mdriver --images kitty document.md
 ```
 
 **Note**: Image rendering requires a terminal that supports the kitty graphics protocol. In terminals without support, images will display as alt text.
+
+## Color Output Control
+
+By default, mdriver automatically detects whether to use ANSI colors based on whether stdout is a terminal. You can override this behavior with the `--color` flag.
+
+### Color Modes
+
+| Mode | Description |
+|------|-------------|
+| `auto` | Use colors only when stdout is a terminal (default) |
+| `always` | Always emit ANSI color codes, even when piping |
+| `never` | Never use colors; pass markdown through unchanged |
+
+### Usage Examples
+
+```bash
+# Default behavior (auto-detect)
+mdriver README.md              # Colors in terminal
+mdriver README.md | less       # No colors (not a tty)
+
+# Force colors when piping to a pager
+mdriver --color=always README.md | less -R
+
+# Disable colors entirely
+mdriver --color=never README.md
+
+# Alternative syntax (space instead of =)
+mdriver --color always README.md
+```
+
+### Common Use Cases
+
+**Piping to a pager with colors**:
+```bash
+mdriver --color=always README.md | less -R
+```
+The `-R` flag tells `less` to interpret ANSI escape sequences.
+
+**Saving colored output to a file**:
+```bash
+mdriver --color=always README.md > output.txt
+```
+The file will contain ANSI codes that display colors when `cat`ed to a terminal.
+
+**Plain text output**:
+```bash
+mdriver --color=never README.md > plain.md
+```
+Passes the markdown through without any formatting.
 
 ## HTML Entity Support
 
