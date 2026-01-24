@@ -799,13 +799,13 @@ mod html_entities {
         assert_eq!(result, "©");
     }
 
-    // Entity without semicolon (common in wild markdown)
+    // Entity without semicolon - not decoded (HTML5 requires semicolon)
     #[test]
     fn test_entity_without_semicolon() {
         let p = parser();
-        // The space after &nbsp should be preserved
+        // Without semicolon, the entity is not decoded
         let result = p.format_inline("Hello&nbsp world");
-        assert_eq!(result, "Hello\u{00A0} world");
+        assert_eq!(result, "Hello&nbsp world");
     }
 
     // Unknown entity should be preserved
@@ -847,6 +847,80 @@ mod html_entities {
         let p = parser();
         let result = p.format_inline("Test &");
         assert_eq!(result, "Test &");
+    }
+
+    // Greek letters (now supported via htmlentity crate)
+    #[test]
+    fn test_greek_letters() {
+        let p = parser();
+        let result = p.format_inline("&alpha; + &beta; = &gamma;");
+        assert_eq!(result, "α + β = γ");
+    }
+
+    #[test]
+    fn test_greek_uppercase() {
+        let p = parser();
+        let result = p.format_inline("&Sigma; &Omega; &Pi;");
+        assert_eq!(result, "Σ Ω Π");
+    }
+
+    #[test]
+    fn test_common_greek_symbols() {
+        let p = parser();
+        let result = p.format_inline("f(&theta;) = &pi;r&sup2;");
+        assert_eq!(result, "f(θ) = πr²");
+    }
+
+    // Mathematical symbols (now supported via htmlentity crate)
+    #[test]
+    fn test_math_comparison() {
+        let p = parser();
+        let result = p.format_inline("x &ne; y, a &le; b, c &ge; d");
+        assert_eq!(result, "x ≠ y, a ≤ b, c ≥ d");
+    }
+
+    #[test]
+    fn test_infinity_and_special() {
+        let p = parser();
+        let result = p.format_inline("lim &rarr; &infin;");
+        assert_eq!(result, "lim → ∞");
+    }
+
+    #[test]
+    fn test_set_theory() {
+        let p = parser();
+        let result = p.format_inline("x &isin; A &sub; B");
+        assert_eq!(result, "x ∈ A ⊂ B");
+    }
+
+    #[test]
+    fn test_operators() {
+        let p = parser();
+        let result = p.format_inline("&sum; &prod; &radic;");
+        assert_eq!(result, "∑ ∏ √");
+    }
+
+    // Card suits (now supported)
+    #[test]
+    fn test_card_suits() {
+        let p = parser();
+        let result = p.format_inline("&hearts; &spades; &diams; &clubs;");
+        assert_eq!(result, "♥ ♠ ♦ ♣");
+    }
+
+    // Additional typographic entities
+    #[test]
+    fn test_section_and_para() {
+        let p = parser();
+        let result = p.format_inline("See &sect;5 and &para;3");
+        assert_eq!(result, "See §5 and ¶3");
+    }
+
+    #[test]
+    fn test_daggers() {
+        let p = parser();
+        let result = p.format_inline("Note&dagger; and &Dagger;");
+        assert_eq!(result, "Note† and ‡");
     }
 }
 

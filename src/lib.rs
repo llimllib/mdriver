@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
+use htmlentity::entity::{decode as decode_html_entity_bytes, ICodedDataTrait};
 use syntect::easy::HighlightLines;
 use syntect::parsing::SyntaxSet;
 use syntect::util::as_24_bit_terminal_escaped;
@@ -10,52 +11,6 @@ use unicode_width::UnicodeWidthStr;
 
 // Static theme set using two-face's extended themes
 static THEME_SET: LazyLock<EmbeddedLazyThemeSet> = LazyLock::new(two_face::theme::extra);
-
-// HTML entity lookup table
-static HTML_ENTITIES: LazyLock<HashMap<&'static str, char>> = LazyLock::new(|| {
-    let mut m = HashMap::new();
-    // Essential (XML) entities
-    m.insert("amp", '&');
-    m.insert("lt", '<');
-    m.insert("gt", '>');
-    m.insert("quot", '"');
-    m.insert("apos", '\'');
-    // Whitespace
-    m.insert("nbsp", '\u{00A0}');
-    // Typographic
-    m.insert("ndash", '–');
-    m.insert("mdash", '—');
-    m.insert("hellip", '…');
-    m.insert("lsquo", '\u{2018}'); // '
-    m.insert("rsquo", '\u{2019}'); // '
-    m.insert("ldquo", '\u{201C}'); // "
-    m.insert("rdquo", '\u{201D}'); // "
-    m.insert("bull", '•');
-    m.insert("middot", '·');
-    // Symbols
-    m.insert("copy", '©');
-    m.insert("reg", '®');
-    m.insert("trade", '™');
-    m.insert("deg", '°');
-    m.insert("plusmn", '±');
-    m.insert("times", '×');
-    m.insert("divide", '÷');
-    // Fractions
-    m.insert("frac14", '¼');
-    m.insert("frac12", '½');
-    m.insert("frac34", '¾');
-    // Currency
-    m.insert("cent", '¢');
-    m.insert("pound", '£');
-    m.insert("euro", '€');
-    m.insert("yen", '¥');
-    // Arrows
-    m.insert("larr", '←');
-    m.insert("rarr", '→');
-    m.insert("uarr", '↑');
-    m.insert("darr", '↓');
-    m
-});
 
 /// Column alignment in tables
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -2212,7 +2167,7 @@ impl StreamingParser {
             // Check for HTML entities (&amp;, &#123;, &#x7B;)
             if chars[i] == '&' {
                 if let Some((decoded, consumed)) = decode_html_entity(&chars, i) {
-                    result.push(decoded);
+                    result.push_str(&decoded);
                     i += consumed;
                     continue;
                 }
@@ -2932,23 +2887,25 @@ fn is_ascii_punctuation(c: char) -> bool {
 }
 
 /// Try to decode an HTML entity starting at the given position.
-/// Returns Some((decoded_char, chars_consumed)) if an entity is found, None otherwise.
-/// Supports named entities (&amp;), decimal numeric (&#123;), and hex numeric (&#x7B;).
-fn decode_html_entity(chars: &[char], start: usize) -> Option<(char, usize)> {
+/// Returns Some((decoded_string, chars_consumed)) if an entity is found, None otherwise.
+/// Supports all HTML5 named entities (&amp;, &alpha;, etc.), decimal numeric (&#123;),
+/// and hex numeric (&#x7B;).
+fn decode_html_entity(chars: &[char], start: usize) -> Option<(String, usize)> {
     // Must start with '&'
     if start >= chars.len() || chars[start] != '&' {
         return None;
     }
 
     // Find the semicolon (entity terminator) or end of entity name
+    // HTML5 entities can be longer (e.g., &CounterClockwiseContourIntegral; is 31 chars)
     let mut end = start + 1;
-    while end < chars.len() && end - start < 12 {
-        // Max reasonable entity length
+    while end < chars.len() && end - start < 40 {
         if chars[end] == ';' {
+            end += 1; // Include the semicolon
             break;
         }
         // Stop if we hit a character that can't be part of an entity name
-        if chars[end].is_whitespace() || chars[end] == '&' {
+        if chars[end].is_whitespace() || chars[end] == '&' || chars[end] == '<' {
             break;
         }
         // Entity names are alphanumeric (and # for numeric entities)
@@ -2958,43 +2915,21 @@ fn decode_html_entity(chars: &[char], start: usize) -> Option<(char, usize)> {
         end += 1;
     }
 
-    // Check if we found a semicolon, but also allow entities without semicolon
-    let has_semicolon = end < chars.len() && chars[end] == ';';
-
-    // Extract the entity content (without & and optional ;)
+    // Need at least "&X" to be a potential entity
     if end <= start + 1 {
         return None;
     }
 
-    let entity_content: String = chars[start + 1..end].iter().collect();
+    // Extract the potential entity (including & and optional ;)
+    let entity_str: String = chars[start..end].iter().collect();
 
-    // Try numeric entity (decimal or hex)
-    if let Some(num_str) = entity_content.strip_prefix('#') {
-        let codepoint = if let Some(hex) = num_str
-            .strip_prefix('x')
-            .or_else(|| num_str.strip_prefix('X'))
-        {
-            u32::from_str_radix(hex, 16).ok()?
-        } else {
-            num_str.parse::<u32>().ok()?
-        };
-        let decoded = char::from_u32(codepoint)?;
-        let consumed = if has_semicolon {
-            end - start + 1
-        } else {
-            end - start
-        };
-        return Some((decoded, consumed));
-    }
-
-    // Try named entity (with semicolon required for lookup, or without)
-    if let Some(&decoded) = HTML_ENTITIES.get(entity_content.as_str()) {
-        let consumed = if has_semicolon {
-            end - start + 1
-        } else {
-            end - start
-        };
-        return Some((decoded, consumed));
+    // Use htmlentity crate to decode
+    let decoded = decode_html_entity_bytes(entity_str.as_bytes());
+    if let Ok(decoded_str) = decoded.to_string() {
+        // Check if decoding actually changed anything
+        if decoded_str != entity_str {
+            return Some((decoded_str, end - start));
+        }
     }
 
     None
