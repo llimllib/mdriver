@@ -7,58 +7,68 @@ description: Export the current Pi session transcript to an HTML file for inclus
 
 This skill exports the current Pi session to an HTML file for PR documentation.
 
-## Quick Usage
-
-Use the helper script (relative to this skill directory):
-
-```bash
-./export-transcript.sh <pr-number> <description> [output-dir]
-```
-
-Example:
-```bash
-./.pi/skills/pr-transcript/export-transcript.sh 21 replace-release-with-goreleaser
-# Exports to: transcripts/21-replace-release-with-goreleaser.html
-```
-
-## Manual Process
-
-If the script doesn't work or you need more control:
-
-1. **Find the current session file**:
-   ```bash
-   # Session files are stored based on the working directory
-   SESSION_DIR="$HOME/.pi/agent/sessions/--$(pwd | tr '/' '-' | sed 's/^-//')--"
-   
-   # List sessions to find the current one (most recent)
-   ls -t "$SESSION_DIR"/*.jsonl | head -1
-   ```
-
-2. **Export the transcript**:
-   ```bash
-   pi --export <session_file> transcripts/<pr_number>-<description>.html
-   ```
-
 ## Workflow
 
-When the user says they're ready to submit a PR or asks for a transcript:
+The PR number isn't known until the PR is created, so follow this order:
 
-1. Find the most recent session file for the current directory
-2. Ask for PR number and a short description (if not provided)
-3. Create the transcripts directory if it doesn't exist
-4. Run `pi --export` with the session file and output path
-5. Confirm the file was created
-6. Suggest adding the transcript to the PR description
+1. **Commit and push** the code changes
+2. **Export transcript** with a temporary name (e.g., `transcripts/temp-<description>.html`)
+3. **Commit and push** the transcript
+4. **Create the PR** with `gh pr create` (now we have the PR number)
+5. **Rename the transcript** to include the PR number (e.g., `transcripts/<pr-number>-<description>.html`)
+6. **Commit and push** the rename
+7. **Update the PR body** with `gh pr edit` to fix the transcript link
 
-## Example
+## Finding the Session File
 
-User: "I'm ready to submit a PR, please export the transcript"
+```bash
+# Session files are stored based on the working directory
+SESSION_DIR="$HOME/.pi/agent/sessions/--$(pwd | tr '/' '-' | sed 's/^-//')--"
 
-1. Find session: `~/.pi/agent/sessions/--Users-llimllib-code-mdriver-goreleaser--/2026-01-16T15-41-47-921Z_abc123.jsonl`
-2. Ask: "What's the PR number and a short description?"
-3. User: "PR 21, replace-release-with-goreleaser"
-4. Run: `pi --export <session> transcripts/21-replace-release-with-goreleaser.html`
-5. Output: "Transcript exported to transcripts/21-replace-release-with-goreleaser.html"
+# Get the most recent session file
+ls -t "$SESSION_DIR"/*.jsonl | head -1
+```
+
+## Exporting the Transcript
+
+```bash
+mkdir -p transcripts
+pi --export <session_file> transcripts/temp-<description>.html
+```
+
+## Complete Example
+
+User: "commit it and file a PR, including a transcript"
+
+```bash
+# 1. Commit and push code changes
+git add -A && git commit -m "Add feature X" && git push origin my-branch
+
+# 2. Find session and export transcript with temp name
+SESSION_FILE=$(ls -t "$HOME/.pi/agent/sessions/--$(pwd | tr '/' '-' | sed 's/^-//')--"/*.jsonl | head -1)
+mkdir -p transcripts
+pi --export "$SESSION_FILE" transcripts/temp-feature-x.html
+
+# 3. Commit and push transcript
+git add transcripts/temp-feature-x.html
+git commit -m "Add session transcript for PR"
+git push origin my-branch
+
+# 4. Create PR (captures the PR number)
+gh pr create --title "Add feature X" --body "..." 
+# Output: https://github.com/user/repo/pull/42
+
+# 5. Rename transcript with PR number
+mv transcripts/temp-feature-x.html transcripts/42-feature-x.html
+git add -A && git commit -m "Rename transcript with PR number"
+git push origin my-branch
+
+# 6. Update PR body with correct transcript link
+gh pr edit 42 --body "...
+## Session Transcript
+[View transcript](https://github.com/user/repo/blob/my-branch/transcripts/42-feature-x.html)
+"
+```
 
 ## Notes
 
@@ -66,3 +76,4 @@ User: "I'm ready to submit a PR, please export the transcript"
 - Multiple session files may exist; use the most recent one (sorted by timestamp in filename)
 - Create `transcripts/` directory if it doesn't exist
 - The description should be kebab-case (lowercase with hyphens)
+- Always include a "Session Transcript" section in the PR body with a link to the file
