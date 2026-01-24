@@ -1,0 +1,24 @@
+name = "indented-code-blank-lines"
+description = "Blank lines within indented code blocks should be preserved"
+
+[[chunks]]
+input = "    line1\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = ""
+
+[[chunks]]
+input = "    line2\n"
+emit = ""
+
+# Non-indented line terminates the code block
+[[chunks]]
+input = "done\n"
+emit = "    \u001b[38;2;192;197;206mline1\n    \u001b[38;2;192;197;206m\n    \u001b[38;2;192;197;206mline2\n\u001b[0m\n"
+
+# Flush the paragraph
+[[chunks]]
+input = "\n"
+emit = "done\n\n"

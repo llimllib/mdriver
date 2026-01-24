@@ -1,0 +1,24 @@
+name = "indented-code-extra-indent"
+description = "Extra indentation (5+ spaces) preserves the extra spaces"
+
+[[chunks]]
+input = "    line1\n"
+emit = ""
+
+# 5 spaces = 1 extra space preserved
+[[chunks]]
+input = "     indented\n"
+emit = ""
+
+# 8 spaces = 4 extra spaces preserved
+[[chunks]]
+input = "        double\n"
+emit = ""
+
+[[chunks]]
+input = "done\n"
+emit = "    \u001b[38;2;192;197;206mline1\n    \u001b[38;2;192;197;206m indented\n    \u001b[38;2;192;197;206m    double\n\u001b[0m\n"
+
+[[chunks]]
+input = "\n"
+emit = "done\n\n"

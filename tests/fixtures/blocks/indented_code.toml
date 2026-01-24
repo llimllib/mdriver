@@ -1,0 +1,21 @@
+name = "indented-code-basic"
+description = "Indented code blocks (4+ spaces) should be recognized and formatted"
+
+# Test basic indented code block
+[[chunks]]
+input = "    line1\n"
+emit = ""
+
+[[chunks]]
+input = "    line2\n"
+emit = ""
+
+# Non-indented line terminates the code block and starts paragraph
+[[chunks]]
+input = "done\n"
+emit = "    \u001b[38;2;192;197;206mline1\n    \u001b[38;2;192;197;206mline2\n\u001b[0m\n"
+
+# End of document - paragraph is flushed
+[[chunks]]
+input = "\n"
+emit = "done\n\n"

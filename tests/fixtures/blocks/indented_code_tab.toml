@@ -1,0 +1,18 @@
+name = "indented-code-tab"
+description = "Tab-indented code blocks should be recognized"
+
+[[chunks]]
+input = "\tline1\n"
+emit = ""
+
+[[chunks]]
+input = "\tline2\n"
+emit = ""
+
+[[chunks]]
+input = "done\n"
+emit = "    \u001b[38;2;192;197;206mline1\n    \u001b[38;2;192;197;206mline2\n\u001b[0m\n"
+
+[[chunks]]
+input = "\n"
+emit = "done\n\n"

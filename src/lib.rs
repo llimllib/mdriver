@@ -139,6 +139,7 @@ enum ParserState {
     InBlockquote {
         nesting_level: usize,
     },
+    InIndentedCodeBlock,
 }
 
 #[derive(Debug, Clone)]
@@ -163,6 +164,9 @@ enum BlockBuilder {
     Blockquote {
         lines: Vec<(usize, String)>,
         current_nesting: usize,
+    },
+    IndentedCodeBlock {
+        lines: Vec<String>,
     },
 }
 
@@ -436,6 +440,7 @@ impl StreamingParser {
             ParserState::InListAfterBlank => self.handle_in_list_after_blank(line),
             ParserState::InTable => self.handle_in_table(line),
             ParserState::InBlockquote { .. } => self.handle_in_blockquote(line),
+            ParserState::InIndentedCodeBlock => self.handle_in_indented_code_block(line),
         }
     }
 
@@ -508,6 +513,16 @@ impl StreamingParser {
             self.link_definitions
                 .entry(normalized_label)
                 .or_insert((url, title));
+            return None;
+        }
+
+        // Check for indented code block (4+ spaces or tab)
+        // Must come after list check (lists take precedence)
+        if let Some(content) = self.is_indented_code_line(trimmed) {
+            self.state = ParserState::InIndentedCodeBlock;
+            self.current_block = BlockBuilder::IndentedCodeBlock {
+                lines: vec![content.to_string()],
+            };
             return None;
         }
 
@@ -787,6 +802,36 @@ impl StreamingParser {
         None
     }
 
+    fn handle_in_indented_code_block(&mut self, line: &str) -> Option<String> {
+        let trimmed = line.trim_end_matches('\n');
+
+        // Blank line - preserve in code block
+        if trimmed.is_empty() {
+            if let BlockBuilder::IndentedCodeBlock { lines } = &mut self.current_block {
+                lines.push(String::new());
+            }
+            return None;
+        }
+
+        // Still indented? Continue accumulating
+        if let Some(content) = self.is_indented_code_line(trimmed) {
+            if let BlockBuilder::IndentedCodeBlock { lines } = &mut self.current_block {
+                lines.push(content.to_string());
+            }
+            return None;
+        }
+
+        // Not indented - emit block and process line in ready state
+        let output = self.emit_current_block();
+        let next_output = self.handle_ready_state(line);
+
+        match (output, next_output) {
+            (Some(o1), Some(o2)) => Some(format!("{}{}", o1, o2)),
+            (Some(o), None) | (None, Some(o)) => Some(o),
+            (None, None) => None,
+        }
+    }
+
     fn parse_atx_heading(&self, line: &str) -> Option<usize> {
         let mut level = 0;
         for ch in line.chars() {
@@ -841,6 +886,12 @@ impl StreamingParser {
         let inner = &trimmed[4..trimmed.len() - 3];
         // Make sure there's no --> in the middle (which would mean malformed)
         !inner.contains("-->")
+    }
+
+    /// Check if a line is indented code (4+ spaces or tab), return content with indentation stripped
+    fn is_indented_code_line<'a>(&self, line: &'a str) -> Option<&'a str> {
+        line.strip_prefix("    ")
+            .or_else(|| line.strip_prefix('\t'))
     }
 
     fn is_horizontal_rule(&self, line: &str) -> bool {
@@ -1127,6 +1178,14 @@ impl StreamingParser {
                 rows,
             } => Some(self.format_table(&header, &alignments, &rows)),
             BlockBuilder::Blockquote { lines, .. } => Some(self.format_blockquote(&lines)),
+            BlockBuilder::IndentedCodeBlock { lines } => {
+                let mut lines = lines.clone();
+                // Strip trailing blank lines
+                while lines.last().is_some_and(|l| l.is_empty()) {
+                    lines.pop();
+                }
+                Some(self.format_code_block(&lines, ""))
+            }
         }
     }
 
@@ -1154,6 +1213,7 @@ impl StreamingParser {
                 .map(|(_, s)| s.as_str())
                 .collect::<Vec<_>>()
                 .join("\n"),
+            BlockBuilder::IndentedCodeBlock { .. } => String::new(), // Code blocks don't have images
         }
     }
 
