@@ -1291,3 +1291,68 @@ mod unicode_width {
         }
     }
 }
+
+mod backslash_escapes {
+    use super::*;
+
+    #[test]
+    fn test_escape_asterisk() {
+        let parser = parser();
+        let output = parser.format_inline("\\*not emphasis*");
+        assert_eq!(strip_ansi(&output), "*not emphasis*");
+    }
+
+    #[test]
+    fn test_escape_underscore() {
+        let parser = parser();
+        let output = parser.format_inline("\\_not italic_");
+        assert_eq!(strip_ansi(&output), "_not italic_");
+    }
+
+    #[test]
+    fn test_escape_backtick() {
+        let parser = parser();
+        let output = parser.format_inline("\\`not code`");
+        assert_eq!(strip_ansi(&output), "`not code`");
+    }
+
+    #[test]
+    fn test_escape_bracket() {
+        let parser = parser();
+        let output = parser.format_inline("\\[not a link\\](/foo)");
+        assert_eq!(strip_ansi(&output), "[not a link](/foo)");
+    }
+
+    #[test]
+    fn test_escape_backslash() {
+        let parser = parser();
+        let output = parser.format_inline("\\\\*emphasis*");
+        // The \\\\ becomes \\ (escaped backslash), then *emphasis* is formatted
+        let stripped = strip_ansi(&output);
+        assert_eq!(stripped, "\\emphasis");
+    }
+
+    #[test]
+    fn test_all_ascii_punctuation() {
+        let parser = parser();
+        let input = "\\!\\\"\\#\\$\\%\\&\\'\\(\\)\\*\\+\\,\\-\\.\\/\\:\\;\\<\\=\\>\\?\\@\\[\\\\\\]\\^\\_\\`\\{\\|\\}\\~";
+        let output = parser.format_inline(input);
+        assert_eq!(strip_ansi(&output), "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~");
+    }
+
+    #[test]
+    fn test_non_punctuation_not_escaped() {
+        let parser = parser();
+        // Backslash before non-ASCII or non-punctuation is kept as-is
+        let output = parser.format_inline("\\A\\a\\ \\3");
+        assert_eq!(strip_ansi(&output), "\\A\\a\\ \\3");
+    }
+
+    #[test]
+    fn test_backslash_at_end() {
+        let parser = parser();
+        // A trailing backslash is preserved
+        let output = parser.format_inline("text\\");
+        assert_eq!(strip_ansi(&output), "text\\");
+    }
+}

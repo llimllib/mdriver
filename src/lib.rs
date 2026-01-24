@@ -2071,6 +2071,23 @@ impl StreamingParser {
         let mut i = 0;
 
         while i < chars.len() {
+            // Check for backslash escapes FIRST (before any other markdown processing)
+            // Per GFM spec: any ASCII punctuation can be backslash-escaped
+            if chars[i] == '\\' && i + 1 < chars.len() {
+                let next = chars[i + 1];
+                // ASCII punctuation characters that can be escaped
+                if is_ascii_punctuation(next) {
+                    result.push(next);
+                    i += 2;
+                    continue;
+                }
+                // Backslash before non-punctuation is literal (kept as backslash)
+                // But we still advance past it so the next char gets normal processing
+                result.push('\\');
+                i += 1;
+                continue;
+            }
+
             // Check for ![alt](src) images
             if chars[i] == '!' {
                 if let Some(img) = self.parse_image(&chars, i) {
@@ -2872,6 +2889,46 @@ impl Default for StreamingParser {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Check if a character is ASCII punctuation (for backslash escape handling).
+/// Per GFM spec, these are the characters that can be backslash-escaped:
+/// !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~
+fn is_ascii_punctuation(c: char) -> bool {
+    matches!(
+        c,
+        '!' | '"'
+            | '#'
+            | '$'
+            | '%'
+            | '&'
+            | '\''
+            | '('
+            | ')'
+            | '*'
+            | '+'
+            | ','
+            | '-'
+            | '.'
+            | '/'
+            | ':'
+            | ';'
+            | '<'
+            | '='
+            | '>'
+            | '?'
+            | '@'
+            | '['
+            | '\\'
+            | ']'
+            | '^'
+            | '_'
+            | '`'
+            | '{'
+            | '|'
+            | '}'
+            | '~'
+    )
 }
 
 /// Try to decode an HTML entity starting at the given position.

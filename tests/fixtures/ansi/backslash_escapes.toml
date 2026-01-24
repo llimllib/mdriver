@@ -1,0 +1,65 @@
+name = "backslash-escapes"
+description = "Backslash escapes of ASCII punctuation"
+
+# Example 308: All ASCII punctuation can be backslash-escaped
+[[chunks]]
+input = "\\!\\\"\\#\\$\\%\\&\\'\\(\\)\\*\\+\\,\\-\\.\\/\\:\\;\\<\\=\\>\\?\\@\\[\\\\\\]\\^\\_\\`\\{\\|\\}\\~\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~\n\n"
+
+# Example 309: Backslashes before non-ASCII punctuation are literal
+[[chunks]]
+input = "\\→\\A\\a\\ \\3\\φ\\«\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = "\\→\\A\\a\\ \\3\\φ\\«\n\n"
+
+# Example 310: Escaped characters don't have markdown meaning
+[[chunks]]
+input = "\\*not emphasized*\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = "*not emphasized*\n\n"
+
+# Escaped backtick should not start code span
+[[chunks]]
+input = "\\`not code`\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = "`not code`\n\n"
+
+# Escaped underscore
+[[chunks]]
+input = "\\_not italic_\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = "_not italic_\n\n"
+
+# Example 311: Escaped backslash followed by emphasis
+[[chunks]]
+input = "\\\\*emphasis*\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = "\\\u001b[3memphasis\u001b[0m\n\n"
+
+# Escaped brackets don't form links
+[[chunks]]
+input = "\\[not a link\\](/foo)\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = "[not a link](/foo)\n\n"
