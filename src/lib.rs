@@ -890,7 +890,8 @@ impl StreamingParser {
 
     /// Check if a line is indented code (4+ spaces or tab), return content with indentation stripped
     fn is_indented_code_line<'a>(&self, line: &'a str) -> Option<&'a str> {
-        line.strip_prefix("    ").or_else(|| line.strip_prefix('\t'))
+        line.strip_prefix("    ")
+            .or_else(|| line.strip_prefix('\t'))
     }
 
     fn is_horizontal_rule(&self, line: &str) -> bool {
