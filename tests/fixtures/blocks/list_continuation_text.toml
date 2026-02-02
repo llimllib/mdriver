@@ -1,0 +1,34 @@
+name = "list-continuation-text"
+description = "Indented continuation lines should be joined with the list item"
+
+[[chunks]]
+input = "1. First item with\n"
+emit = ""
+
+[[chunks]]
+input = "    continuation text\n"
+emit = ""
+
+[[chunks]]
+input = "    and more continuation\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = ""
+
+[[chunks]]
+input = "2. Second item\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = ""
+
+[[chunks]]
+input = "done\n"
+emit = "  1. First item with continuation text and more continuation\n  2. Second item\n\n"
+
+[[chunks]]
+input = "\n"
+emit = "done\n\n"

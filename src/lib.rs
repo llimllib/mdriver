@@ -24,7 +24,19 @@ enum Alignment {
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum ListItemType {
     Unordered,
-    Ordered,
+    Ordered(usize), // Stores the original number from the markdown
+}
+
+impl ListItemType {
+    /// Check if two list item types are the same kind (both ordered or both unordered),
+    /// ignoring the specific number for ordered lists.
+    fn same_kind(&self, other: &ListItemType) -> bool {
+        matches!(
+            (self, other),
+            (ListItemType::Unordered, ListItemType::Unordered)
+                | (ListItemType::Ordered(_), ListItemType::Ordered(_))
+        )
+    }
 }
 
 /// Callout type for GitHub-style alerts
@@ -615,8 +627,20 @@ impl StreamingParser {
                 };
                 return emission;
             } else {
-                // Indented content that's not a code fence - it's list continuation (e.g., multi-paragraph item)
-                // Just ignore it and stay in the list
+                // Indented content that's not a code fence - it's list continuation
+                // Append to the current list item (preserving a space for line joining)
+                if let BlockBuilder::List { items } = &mut self.current_block {
+                    if let Some((_, _, content)) = items.last_mut() {
+                        // Append this line's content, trimming excess leading whitespace
+                        // Use a single space to join, which allows multi-line markdown
+                        // constructs like links to be parsed correctly
+                        let continuation = after_indent.trim_start();
+                        if !continuation.is_empty() {
+                            content.push(' ');
+                            content.push_str(continuation);
+                        }
+                    }
+                }
                 return None;
             }
         }
@@ -643,8 +667,8 @@ impl StreamingParser {
             if let BlockBuilder::List { items } = &self.current_block {
                 if !items.is_empty() {
                     let (_, current_type, _) = &items[0];
-                    // If same type, continue the list
-                    if *current_type == new_type {
+                    // If same kind (both ordered or both unordered), continue the list
+                    if current_type.same_kind(&new_type) {
                         self.state = ParserState::InList;
                         return self.handle_in_list(line);
                     }
@@ -660,12 +684,36 @@ impl StreamingParser {
             };
         }
 
-        // Check if it's indented content (4+ spaces) - list continuation
+        // Check if it's indented content (4+ spaces) after a blank line
+        // This could be a fenced code block or an indented code block
         let leading_spaces = trimmed.len() - trimmed.trim_start().len();
         if leading_spaces >= 4 && !trimmed.is_empty() {
-            // This is list continuation - go back to InList and process it
-            self.state = ParserState::InList;
-            return self.handle_in_list(line);
+            let after_indent = &trimmed[4..];
+
+            // Check for fenced code block first
+            if let Some((info, fence, fence_indent)) = self.parse_code_fence(after_indent) {
+                // Emit the list, then start code block
+                let emission = self.emit_current_block();
+                self.state = ParserState::InCodeBlock {
+                    info: info.clone(),
+                    fence: fence.clone(),
+                    indent_offset: 4 + fence_indent,
+                };
+                self.current_block = BlockBuilder::CodeBlock {
+                    lines: Vec::new(),
+                    info,
+                };
+                return emission;
+            }
+
+            // After a blank line, indented content is an indented code block
+            // Emit the list first, then start the indented code block
+            let emission = self.emit_current_block();
+            self.state = ParserState::InIndentedCodeBlock;
+            self.current_block = BlockBuilder::IndentedCodeBlock {
+                lines: vec![after_indent.to_string()],
+            };
+            return emission;
         }
 
         // Otherwise (blank line, non-indented content, or anything else), emit the list
@@ -1051,7 +1099,9 @@ impl StreamingParser {
                     && (1..=4).contains(&spaces)
                     && !after_dot.trim_start().is_empty()
                 {
-                    return Some((leading_spaces, ListItemType::Ordered));
+                    // Parse the original number from the markdown
+                    let num = before_dot.parse::<usize>().unwrap_or(1);
+                    return Some((leading_spaces, ListItemType::Ordered(num)));
                 }
             }
         }
@@ -1324,9 +1374,6 @@ impl StreamingParser {
 
     fn format_list(&self, items: &[(usize, ListItemType, String)]) -> String {
         let mut output = String::new();
-        // Track numbering for each nesting level
-        let mut counters: std::collections::HashMap<usize, usize> =
-            std::collections::HashMap::new();
 
         for (indent_level, item_type, item) in items {
             let trimmed = item.trim_start();
@@ -1372,14 +1419,12 @@ impl StreamingParser {
                     output.push_str(&wrapped);
                     output.push('\n');
                 }
-                ListItemType::Ordered => {
-                    // Increment counter for this nesting level
-                    let counter = counters.entry(nesting_level).or_insert(0);
-                    *counter += 1;
-                    let first_indent = format!("{}  {}. ", indent, counter);
+                ListItemType::Ordered(num) => {
+                    // Use the original number from the markdown
+                    let first_indent = format!("{}  {}. ", indent, num);
                     // Continuation indent aligns with content (after "N. ")
                     let cont_indent =
-                        format!("{}  {}  ", indent, " ".repeat(counter.to_string().len()));
+                        format!("{}  {}  ", indent, " ".repeat(num.to_string().len()));
                     let wrapped = self.wrap_text(&formatted_content, &first_indent, &cont_indent);
                     output.push_str(&wrapped);
                     output.push('\n');

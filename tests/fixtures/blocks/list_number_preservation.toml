@@ -1,0 +1,38 @@
+name = "list-number-preservation"
+description = "List numbers should be preserved from markdown even when list is broken by code blocks"
+
+[[chunks]]
+input = "1. First\n"
+emit = ""
+
+[[chunks]]
+input = "2. Second\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = ""
+
+[[chunks]]
+input = "    code block\n"
+emit = "  1. First\n  2. Second\n\n"
+
+[[chunks]]
+input = "\n"
+emit = ""
+
+[[chunks]]
+input = "3. Third\n"
+emit = "    \u001b[38;2;192;197;206mcode block\n\u001b[0m\n"
+
+[[chunks]]
+input = "\n"
+emit = ""
+
+[[chunks]]
+input = "done\n"
+emit = "  3. Third\n\n"
+
+[[chunks]]
+input = "\n"
+emit = "done\n\n"

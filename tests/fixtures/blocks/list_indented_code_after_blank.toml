@@ -1,0 +1,34 @@
+name = "list-indented-code-after-blank"
+description = "Indented content after a blank line in a list should be treated as a code block"
+
+[[chunks]]
+input = "3. Install homebrew\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = ""
+
+[[chunks]]
+input = "    echo hello\n"
+emit = "  3. Install homebrew\n\n"
+
+[[chunks]]
+input = "\n"
+emit = ""
+
+[[chunks]]
+input = "4. Next item\n"
+emit = "    \u001b[38;2;192;197;206mecho hello\n\u001b[0m\n"
+
+[[chunks]]
+input = "\n"
+emit = ""
+
+[[chunks]]
+input = "done\n"
+emit = "  4. Next item\n\n"
+
+[[chunks]]
+input = "\n"
+emit = "done\n\n"
