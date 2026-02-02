@@ -1,0 +1,22 @@
+name = "list-multiline-link"
+description = "Links split across multiple lines in list items should be parsed correctly"
+
+[[chunks]]
+input = "1. [Create an SSH\n"
+emit = ""
+
+[[chunks]]
+input = "    key](https://example.com)\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = ""
+
+[[chunks]]
+input = "done\n"
+emit = "  1. \u001b]8;;https://example.com\u001b\\\u001b[34;4mCreate an SSH key\u001b[0m\u001b]8;;\u001b\\\n\n"
+
+[[chunks]]
+input = "\n"
+emit = "done\n\n"

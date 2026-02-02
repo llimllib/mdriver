@@ -1,0 +1,30 @@
+name = "list-nested-continuation"
+description = "Nested list items with continuation text should be handled correctly"
+
+[[chunks]]
+input = "1. Parent item\n"
+emit = ""
+
+[[chunks]]
+input = "    1. Child item with\n"
+emit = ""
+
+[[chunks]]
+input = "        continuation\n"
+emit = ""
+
+[[chunks]]
+input = "    2. Second child\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = ""
+
+[[chunks]]
+input = "done\n"
+emit = "  1. Parent item\n    1. Child item with continuation\n    2. Second child\n\n"
+
+[[chunks]]
+input = "\n"
+emit = "done\n\n"
