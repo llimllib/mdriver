@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
@@ -78,10 +77,6 @@ pub struct StreamingParser {
     image_cache: HashMap<String, Vec<u8>>,
     /// Link reference definitions: normalized_label -> (url, optional_title)
     link_definitions: HashMap<String, (String, Option<String>)>,
-    /// Pending citations for bibliography: (citation_number, label, display_text)
-    pending_citations: RefCell<Vec<(usize, String, String)>>,
-    /// Next citation number to assign
-    next_citation_number: RefCell<usize>,
 }
 
 /// Calculate the default output width: min(terminal_width, 80)
@@ -177,8 +172,6 @@ impl StreamingParser {
             width: default_width(),
             image_cache: HashMap::new(),
             link_definitions: HashMap::new(),
-            pending_citations: RefCell::new(Vec::new()),
-            next_citation_number: RefCell::new(1),
         }
     }
 
@@ -195,8 +188,6 @@ impl StreamingParser {
             width,
             image_cache: HashMap::new(),
             link_definitions: HashMap::new(),
-            pending_citations: RefCell::new(Vec::new()),
-            next_citation_number: RefCell::new(1),
         }
     }
 
@@ -350,52 +341,7 @@ impl StreamingParser {
             output.push_str(&emission);
         }
 
-        // Emit bibliography if there are pending citations
-        if let Some(bibliography) = self.format_bibliography() {
-            output.push_str(&bibliography);
-        }
-
         output
-    }
-
-    /// Format the bibliography section with pending citations
-    fn format_bibliography(&self) -> Option<String> {
-        let citations = self.pending_citations.borrow();
-        if citations.is_empty() {
-            return None;
-        }
-
-        let mut output = String::new();
-
-        // Header with a horizontal rule and title
-        output.push_str("\n\u{001b}[1;34m─── References ───\u{001b}[0m\n\n");
-
-        for (num, label, _text) in citations.iter() {
-            let normalized_label = self.normalize_link_label(label);
-
-            // Check if we now have a definition
-            if let Some((url, title)) = self.link_definitions.get(&normalized_label) {
-                // Render as OSC8 hyperlink
-                output.push_str(&format!(
-                    "[{}] {}: \u{001b}]8;;{}\u{001b}\\\u{001b}[34;4m{}\u{001b}[0m\u{001b}]8;;\u{001b}\\",
-                    num, label, url, url
-                ));
-
-                if let Some(t) = title {
-                    output.push_str(&format!(" \"{}\"", t));
-                }
-            } else {
-                // No definition found - mark as unresolved
-                output.push_str(&format!(
-                    "[{}] {}: \u{001b}[31m(unresolved)\u{001b}[0m",
-                    num, label
-                ));
-            }
-            output.push('\n');
-        }
-
-        output.push('\n');
-        Some(output)
     }
 
     fn process_line(&mut self, line: &str) -> Option<String> {
@@ -1248,12 +1194,6 @@ impl StreamingParser {
         let mut result = String::new();
 
         for (i, line) in lines.iter().enumerate() {
-            // Check for hard line break: 2+ trailing spaces or trailing backslash
-            let has_hard_break = line.ends_with("  ")
-                || line.ends_with("   ")
-                || line.ends_with("    ")
-                || line.ends_with('\\');
-
             // Remove trailing spaces/backslash for formatting
             let trimmed = if line.ends_with('\\') {
                 &line[..line.len() - 1]
@@ -1263,11 +1203,11 @@ impl StreamingParser {
 
             result.push_str(trimmed);
 
-            // Add line break or space depending on hard break
-            if has_hard_break && i < lines.len() - 1 {
+            // Always treat single newlines as hard breaks.
+            // This preserves the visual structure of plain text (like CLI help output)
+            // piped through mdriver, while still rendering markdown features correctly.
+            if i < lines.len() - 1 {
                 result.push('\n');
-            } else if i < lines.len() - 1 {
-                result.push(' ');
             }
         }
 
@@ -2498,7 +2438,7 @@ impl StreamingParser {
         None
     }
 
-    /// Render a reference link, either as a resolved hyperlink or as a citation
+    /// Render a reference link, either as a resolved hyperlink or literally
     fn render_reference_link(&self, ref_link: &ReferenceLinkData) -> String {
         let normalized_label = self.normalize_link_label(&ref_link.label);
 
@@ -2511,24 +2451,10 @@ impl StreamingParser {
                 url, formatted_text
             )
         } else {
-            // No definition (yet) - use citation style
-            let citation_num = {
-                let mut num = self.next_citation_number.borrow_mut();
-                let current = *num;
-                *num += 1;
-                current
-            };
-
-            // Store for bibliography
-            self.pending_citations.borrow_mut().push((
-                citation_num,
-                ref_link.label.clone(),
-                ref_link.text.clone(),
-            ));
-
-            // Render as text[n]
-            let formatted_text = self.format_inline(&ref_link.text);
-            format!("{}[{}]", formatted_text, citation_num)
+            // No definition found - render literally as [text] instead of
+            // creating a citation/footnote. This prevents plain text like
+            // "[OPTIONS]" from being mangled into footnotes.
+            format!("[{}]", ref_link.text)
         }
     }
 
