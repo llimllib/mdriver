@@ -983,13 +983,21 @@ mod reference_links {
 
     // Test citation style when definition comes after usage
     #[test]
-    fn test_citation_style_unresolved() {
+    fn test_literal_unresolved_reference() {
         let mut p = parser();
-        // Reference link before definition
+        // Reference link with no definition - should render literally
         let result = p.feed("Read the [documentation][docs] first.\n\n");
         let stripped = strip_ansi(&result);
-        // Should have citation-style output
-        assert!(stripped.contains("documentation[1]"));
+        // Should render the text literally as [documentation] (not as a citation)
+        assert!(
+            stripped.contains("[documentation]"),
+            "Expected literal [documentation] but got: {}",
+            stripped
+        );
+        assert!(
+            !stripped.contains("[1]"),
+            "Should not create citations for unresolved refs"
+        );
     }
 
     // Test that first definition wins for duplicate labels
@@ -1004,30 +1012,47 @@ mod reference_links {
         assert!(!result.contains("https://second.com"));
     }
 
-    // Test bibliography output at flush
+    // Test that forward reference links (definition after use) render literally
     #[test]
-    fn test_bibliography_at_flush() {
+    fn test_forward_reference_renders_literally() {
         let mut p = parser();
-        // Reference link before definition
-        let _ = p.feed("Visit [mysite][site].\n\n");
-        // Then provide the definition
+        // Reference link before definition - renders literally since definition
+        // isn't known at parse time
+        let result = p.feed("Visit [mysite][site].\n\n");
+        let stripped = strip_ansi(&result);
+        assert!(
+            stripped.contains("[mysite]"),
+            "Forward reference should render literally: {}",
+            stripped
+        );
+        // Providing the definition afterward doesn't retroactively fix it
         let _ = p.feed("[site]: https://mysite.com\n\n");
-        // Flush should include bibliography
+        // Flush should NOT include any bibliography
         let flush_result = p.flush();
-        assert!(flush_result.contains("References"));
-        assert!(flush_result.contains("[1]"));
-        assert!(flush_result.contains("https://mysite.com"));
+        assert!(
+            !flush_result.contains("References"),
+            "No bibliography should be emitted"
+        );
     }
 
-    // Test unresolved reference in bibliography
+    // Test unresolved reference renders literally (no footnotes/citations)
     #[test]
-    fn test_unresolved_in_bibliography() {
+    fn test_unresolved_reference_literal() {
         let mut p = parser();
-        // Reference link with no definition
-        let _ = p.feed("Visit [nowhere][missing].\n\n");
-        // Flush should show unresolved
+        // Reference link with no definition - should render as literal [text]
+        let result = p.feed("Visit [nowhere][missing].\n\n");
+        let stripped = strip_ansi(&result);
+        assert!(
+            stripped.contains("[nowhere]"),
+            "Unresolved reference should render literally: {}",
+            stripped
+        );
+        // Flush should be clean - no bibliography or unresolved markers
         let flush_result = p.flush();
-        assert!(flush_result.contains("unresolved"));
+        assert!(
+            !flush_result.contains("unresolved"),
+            "No unresolved markers should appear"
+        );
     }
 
     // Test link definition with title
