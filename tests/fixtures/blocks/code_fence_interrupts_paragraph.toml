@@ -1,0 +1,18 @@
+name = "code-fence-interrupts-paragraph"
+description = "Fenced code block should interrupt a paragraph (no blank line needed per CommonMark spec)"
+
+[[chunks]]
+input = "Some text.\n"
+emit = ""
+
+[[chunks]]
+input = "```python\n"
+emit = "Some text.\n\n"
+
+[[chunks]]
+input = "x = 1\n"
+emit = ""
+
+[[chunks]]
+input = "```\n"
+emit = "    \u001b[38;2;192;197;206mx\u001b[38;2;192;197;206m \u001b[38;2;192;197;206m=\u001b[38;2;192;197;206m \u001b[38;2;208;135;112m1\u001b[38;2;192;197;206m\n\u001b[0m\n"
