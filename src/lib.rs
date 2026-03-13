@@ -466,6 +466,22 @@ impl StreamingParser {
             }
         }
 
+        // Check for fenced code block opening (``` or ~~~)
+        // Per CommonMark spec, code fences can interrupt paragraphs
+        if let Some((info, fence, indent_offset)) = self.parse_code_fence(trimmed) {
+            let output = self.emit_current_block();
+            self.state = ParserState::InCodeBlock {
+                info: info.clone(),
+                fence: fence.clone(),
+                indent_offset,
+            };
+            self.current_block = BlockBuilder::CodeBlock {
+                lines: Vec::new(),
+                info,
+            };
+            return output;
+        }
+
         // Check if this might be a table delimiter row
         if let BlockBuilder::Paragraph { lines } = &self.current_block {
             if lines.len() == 1 && self.is_table_delimiter_row(trimmed) {
