@@ -1455,3 +1455,69 @@ mod backslash_escapes {
         assert_eq!(strip_ansi(&output), "text\\");
     }
 }
+
+mod multi_backtick_code_spans {
+    use super::*;
+
+    /// GFM spec Example 349: double backtick code span containing a single backtick
+    #[test]
+    fn test_double_backtick_containing_single() {
+        let p = parser();
+        let result = p.format_inline("``foo`bar``");
+        let stripped = strip_ansi(&result);
+        assert_eq!(stripped, " foo`bar ");
+    }
+
+    /// GFM spec Example 339: double backtick with space stripping
+    #[test]
+    fn test_double_backtick_space_stripping() {
+        let p = parser();
+        let result = p.format_inline("`` foo ` bar ``");
+        let stripped = strip_ansi(&result);
+        assert_eq!(stripped, " foo ` bar ");
+    }
+
+    /// GFM spec Example 340: single backtick wrapping double backticks
+    #[test]
+    fn test_single_backtick_wrapping_double() {
+        let p = parser();
+        let result = p.format_inline("` `` `");
+        let stripped = strip_ansi(&result);
+        assert_eq!(stripped, " `` ");
+    }
+
+    /// GFM spec Example 350: single backtick span with double backticks inside
+    #[test]
+    fn test_single_backtick_with_double_inside() {
+        let p = parser();
+        let result = p.format_inline("` foo `` bar `");
+        let stripped = strip_ansi(&result);
+        assert_eq!(stripped, " foo `` bar ");
+    }
+
+    /// GFM spec Example 357: unmatched backtick strings are literal
+    #[test]
+    fn test_unmatched_backticks_literal() {
+        let p = parser();
+        let result = p.format_inline("```foo``");
+        assert_eq!(result, "```foo``");
+    }
+
+    /// Triple backtick code span
+    #[test]
+    fn test_triple_backtick_code_span() {
+        let p = parser();
+        let result = p.format_inline("``` `` ` ```");
+        let stripped = strip_ansi(&result);
+        assert_eq!(stripped, " `` ` ");
+    }
+
+    /// Single backtick still works
+    #[test]
+    fn test_single_backtick_still_works() {
+        let p = parser();
+        let result = p.format_inline("`code`");
+        let stripped = strip_ansi(&result);
+        assert_eq!(stripped, " code ");
+    }
+}
