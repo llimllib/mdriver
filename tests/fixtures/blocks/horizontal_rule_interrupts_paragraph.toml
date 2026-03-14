@@ -1,0 +1,45 @@
+name = "horizontal-rule-interrupts-paragraph"
+description = "Thematic breaks (***,  ___,  * * *) should interrupt a paragraph per GFM spec §4.1"
+width = 80
+
+# --- is a setext heading underline, not a thematic break, so it's excluded here.
+# Only ***, ___, and spaced variants are tested.
+
+# *** interrupts paragraph
+[[chunks]]
+input = "Foo\n"
+emit = ""
+
+[[chunks]]
+input = "***\n"
+emit = "Foo\n\n\u001b[2m────────────────────────────────────────────────────────────────────────────────\u001b[0m\n\n"
+
+[[chunks]]
+input = "bar\n\n"
+emit = "bar\n\n"
+
+# ___ interrupts paragraph
+[[chunks]]
+input = "Baz\n"
+emit = ""
+
+[[chunks]]
+input = "___\n"
+emit = "Baz\n\n\u001b[2m────────────────────────────────────────────────────────────────────────────────\u001b[0m\n\n"
+
+[[chunks]]
+input = "qux\n\n"
+emit = "qux\n\n"
+
+# * * * (spaced variant) interrupts paragraph
+[[chunks]]
+input = "Hello\n"
+emit = ""
+
+[[chunks]]
+input = "* * *\n"
+emit = "Hello\n\n\u001b[2m────────────────────────────────────────────────────────────────────────────────\u001b[0m\n\n"
+
+[[chunks]]
+input = "world\n\n"
+emit = "world\n\n"

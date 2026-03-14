@@ -467,6 +467,19 @@ impl StreamingParser {
             }
         }
 
+        // Check for thematic break (horizontal rule)
+        // Per GFM spec §4.1, thematic breaks can interrupt a paragraph.
+        // Note: setext underline check above takes precedence, so `---` inside
+        // a paragraph becomes a setext heading, not a thematic break.
+        if self.is_horizontal_rule(trimmed) {
+            let output = self.emit_current_block();
+            let hr = self.format_horizontal_rule();
+            return match output {
+                Some(e) => Some(format!("{}{}", e, hr)),
+                None => Some(hr),
+            };
+        }
+
         // Check for fenced code block opening (``` or ~~~)
         // Per CommonMark spec, code fences can interrupt paragraphs
         if let Some((info, fence, indent_offset)) = self.parse_code_fence(trimmed) {
