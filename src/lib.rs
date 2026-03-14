@@ -579,8 +579,19 @@ impl StreamingParser {
             // or 4+ spaces (when inside a list item)
             let line_trimmed = trimmed.trim_start();
 
-            // Check if this line is just the fence (possibly with trailing spaces)
-            if line_trimmed.starts_with(fence) && line_trimmed.trim() == fence.trim() {
+            // Check if this line is a closing fence: must use the same character
+            // and be at least as long as the opening fence (GFM spec §4.5)
+            let fence_char = fence.chars().next().unwrap_or('`');
+            let closing_len = line_trimmed
+                .chars()
+                .take_while(|&c| c == fence_char)
+                .count();
+            let after_fence = line_trimmed[line_trimmed
+                .chars()
+                .take_while(|&c| c == fence_char)
+                .count()..]
+                .trim();
+            if closing_len >= fence.len() && after_fence.is_empty() {
                 // Closing fence - emit the block
                 return self.emit_current_block();
             }
@@ -1007,17 +1018,25 @@ impl StreamingParser {
 
         let trimmed = line.trim_start();
 
-        if let Some(rest) = trimmed.strip_prefix("```") {
-            let fence = "```".to_string();
-            let info = rest.trim().to_string();
-            Some((info, fence, leading_spaces))
-        } else if let Some(rest) = trimmed.strip_prefix("~~~") {
-            let fence = "~~~".to_string();
-            let info = rest.trim().to_string();
-            Some((info, fence, leading_spaces))
-        } else {
-            None
+        let fence_char = trimmed.chars().next()?;
+        if fence_char != '`' && fence_char != '~' {
+            return None;
         }
+
+        let fence_len = trimmed.chars().take_while(|&c| c == fence_char).count();
+        if fence_len < 3 {
+            return None;
+        }
+
+        let fence = trimmed[..fence_len].to_string();
+        let info = trimmed[fence_len..].trim().to_string();
+
+        // Per GFM spec: backtick fences cannot have backticks in their info string
+        if fence_char == '`' && info.contains('`') {
+            return None;
+        }
+
+        Some((info, fence, leading_spaces))
     }
 
     /// Normalize a link label for matching per GFM spec:
