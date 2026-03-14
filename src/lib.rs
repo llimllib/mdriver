@@ -2227,8 +2227,13 @@ impl StreamingParser {
             }
 
             // Check for __bold__ (underscore variant)
-            if i + 1 < chars.len() && chars[i] == '_' && chars[i + 1] == '_' {
-                if let Some(end) = self.find_closing("__", &chars, i + 2) {
+            // Per GFM spec §6.4, underscore delimiters have stricter flanking rules
+            if i + 1 < chars.len()
+                && chars[i] == '_'
+                && chars[i + 1] == '_'
+                && can_underscore_open(&chars, i, 2)
+            {
+                if let Some(end) = self.find_closing_underscore("__", &chars, i + 2) {
                     let inner: String = chars[i + 2..end].iter().collect();
                     let formatted_inner = self.format_inline(&inner);
                     result.push_str("\u{001b}[1m");
@@ -2240,8 +2245,9 @@ impl StreamingParser {
             }
 
             // Check for _italic_ (underscore variant)
-            if chars[i] == '_' {
-                if let Some(end) = self.find_closing("_", &chars, i + 1) {
+            // Per GFM spec §6.4, underscore delimiters have stricter flanking rules
+            if chars[i] == '_' && can_underscore_open(&chars, i, 1) {
+                if let Some(end) = self.find_closing_underscore("_", &chars, i + 1) {
                     let inner: String = chars[i + 1..end].iter().collect();
                     let formatted_inner = self.format_inline(&inner);
                     result.push_str("\u{001b}[3m");
@@ -2875,6 +2881,52 @@ impl StreamingParser {
         })
     }
 
+    /// Find a closing underscore delimiter that satisfies GFM flanking rules.
+    /// The closing `_` or `__` must be part of a right-flanking delimiter run and
+    /// satisfy the additional underscore-specific rules from GFM spec §6.4.
+    fn find_closing_underscore(&self, marker: &str, chars: &[char], start: usize) -> Option<usize> {
+        let marker_chars: Vec<char> = marker.chars().collect();
+        let marker_len = marker_chars.len();
+
+        let mut i = start;
+        while i + marker_len <= chars.len() {
+            // Check for marker match
+            let mut matches = true;
+            for (j, &mc) in marker_chars.iter().enumerate() {
+                if chars[i + j] != mc {
+                    matches = false;
+                    break;
+                }
+            }
+
+            if matches {
+                // For "__", make sure we don't match in the middle of "___" or more
+                // We want exactly the right number of underscores
+                if marker_len == 2 {
+                    // Check that the char after the match is not also '_'
+                    if i + 2 < chars.len() && chars[i + 2] == '_' {
+                        i += 1;
+                        continue;
+                    }
+                } else if marker_len == 1 {
+                    // For single "_", make sure this isn't actually "__"
+                    if i + 1 < chars.len() && chars[i + 1] == '_' {
+                        i += 1;
+                        continue;
+                    }
+                }
+
+                // Check GFM flanking rules for closing
+                if can_underscore_close(chars, i, marker_len) {
+                    return Some(i);
+                }
+            }
+
+            i += 1;
+        }
+        None
+    }
+
     fn find_closing(&self, marker: &str, chars: &[char], start: usize) -> Option<usize> {
         let marker_chars: Vec<char> = marker.chars().collect();
         let marker_len = marker_chars.len();
@@ -2927,6 +2979,125 @@ impl Default for StreamingParser {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Check if a character is Unicode punctuation per GFM spec §6.4.
+/// This includes general Unicode categories Pc, Pd, Pe, Pf, Pi, Po, Ps
+/// as well as ASCII symbol characters.
+fn is_unicode_punctuation(c: char) -> bool {
+    // ASCII punctuation covers the most common cases
+    if is_ascii_punctuation(c) {
+        return true;
+    }
+    // For non-ASCII, check if it's not alphanumeric and not whitespace
+    // This is a reasonable approximation of Unicode punctuation/symbol categories
+    !c.is_alphanumeric() && !c.is_whitespace() && !c.is_control()
+}
+
+/// Check if a character is Unicode whitespace per GFM spec §6.4.
+fn is_unicode_whitespace(c: char) -> bool {
+    c.is_whitespace()
+}
+
+/// Check if a delimiter run at position `pos` (of length `delimiter_len`) is left-flanking.
+/// Per GFM spec §6.4:
+///   A left-flanking delimiter run is a delimiter run that is
+///   (1) not followed by Unicode whitespace, and
+///   (2a) not followed by a Unicode punctuation character, or
+///   (2b) followed by a Unicode punctuation character and preceded by Unicode whitespace or punctuation.
+fn is_left_flanking(chars: &[char], pos: usize, delimiter_len: usize) -> bool {
+    let after_pos = pos + delimiter_len;
+
+    // Must not be followed by whitespace
+    // If at end of text, the delimiter is followed by nothing (treat as end-of-line/whitespace)
+    if after_pos >= chars.len() || is_unicode_whitespace(chars[after_pos]) {
+        return false;
+    }
+
+    let followed_by_punct = is_unicode_punctuation(chars[after_pos]);
+
+    if !followed_by_punct {
+        // Not followed by punctuation → left-flanking
+        true
+    } else {
+        // Followed by punctuation → only left-flanking if preceded by whitespace or punctuation
+        if pos == 0 {
+            // Beginning of text counts as preceded by whitespace
+            true
+        } else {
+            is_unicode_whitespace(chars[pos - 1]) || is_unicode_punctuation(chars[pos - 1])
+        }
+    }
+}
+
+/// Check if a delimiter run at position `pos` (of length `delimiter_len`) is right-flanking.
+/// Per GFM spec §6.4:
+///   A right-flanking delimiter run is a delimiter run that is
+///   (1) not preceded by Unicode whitespace, and
+///   (2a) not preceded by a Unicode punctuation character, or
+///   (2b) preceded by a Unicode punctuation character and followed by Unicode whitespace or punctuation.
+fn is_right_flanking(chars: &[char], pos: usize, delimiter_len: usize) -> bool {
+    let after_pos = pos + delimiter_len;
+
+    // Must not be preceded by whitespace
+    // If at start of text, it's preceded by nothing (treat as whitespace)
+    if pos == 0 || is_unicode_whitespace(chars[pos - 1]) {
+        return false;
+    }
+
+    let preceded_by_punct = is_unicode_punctuation(chars[pos - 1]);
+
+    if !preceded_by_punct {
+        // Not preceded by punctuation → right-flanking
+        true
+    } else {
+        // Preceded by punctuation → only right-flanking if followed by whitespace or punctuation
+        if after_pos >= chars.len() {
+            // End of text counts as followed by whitespace
+            true
+        } else {
+            is_unicode_whitespace(chars[after_pos]) || is_unicode_punctuation(chars[after_pos])
+        }
+    }
+}
+
+/// Check if an underscore delimiter at position `pos` can open emphasis.
+/// Per GFM spec §6.4, rule 2 (for `_`):
+///   A single `_` can open emphasis iff it is part of a left-flanking delimiter run
+///   AND either (a) not part of a right-flanking delimiter run, or
+///   (b) part of a right-flanking delimiter run preceded by punctuation.
+fn can_underscore_open(chars: &[char], pos: usize, delimiter_len: usize) -> bool {
+    if !is_left_flanking(chars, pos, delimiter_len) {
+        return false;
+    }
+
+    let right_flanking = is_right_flanking(chars, pos, delimiter_len);
+    if !right_flanking {
+        return true; // Left-flanking and not right-flanking → can open
+    }
+
+    // Both left-flanking and right-flanking: can open only if preceded by punctuation
+    pos > 0 && is_unicode_punctuation(chars[pos - 1])
+}
+
+/// Check if an underscore delimiter at position `pos` can close emphasis.
+/// Per GFM spec §6.4, rule 4 (for `_`):
+///   A single `_` can close emphasis iff it is part of a right-flanking delimiter run
+///   AND either (a) not part of a left-flanking delimiter run, or
+///   (b) part of a left-flanking delimiter run followed by punctuation.
+fn can_underscore_close(chars: &[char], pos: usize, delimiter_len: usize) -> bool {
+    if !is_right_flanking(chars, pos, delimiter_len) {
+        return false;
+    }
+
+    let left_flanking = is_left_flanking(chars, pos, delimiter_len);
+    if !left_flanking {
+        return true; // Right-flanking and not left-flanking → can close
+    }
+
+    // Both right-flanking and left-flanking: can close only if followed by punctuation
+    let after_pos = pos + delimiter_len;
+    after_pos < chars.len() && is_unicode_punctuation(chars[after_pos])
 }
 
 /// Check if a character is ASCII punctuation (for backslash escape handling).
