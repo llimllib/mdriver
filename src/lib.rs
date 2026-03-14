@@ -2315,6 +2315,16 @@ impl StreamingParser {
                 }
             }
 
+            // Check for <autolink> (URI or email) before HTML tags
+            // Per GFM spec §6.8, autolinks have the same precedence as code spans and HTML tags
+            if chars[i] == '<' {
+                if let Some(autolink) = self.parse_autolink(&chars, i) {
+                    result.push_str(&autolink.formatted);
+                    i = autolink.end_pos;
+                    continue;
+                }
+            }
+
             // Check for <html> tags
             if chars[i] == '<' {
                 if let Some(html) = self.parse_html_tag(&chars, i) {
@@ -2635,6 +2645,132 @@ impl StreamingParser {
 
     /// Parse an HTML tag and return formatted output
     /// Handles: em, i, strong, b, u, s, strike, del, code, a, pre
+    /// Parse an autolink (URI or email) inside `<` and `>`.
+    ///
+    /// Per GFM spec §6.8:
+    /// - URI autolink: `<scheme:...>` where scheme is 2-32 chars starting with a letter,
+    ///   followed by letters/digits/+/./-, then `:`, then non-whitespace/non-`<`/non-`>` chars.
+    /// - Email autolink: `<local@domain>` matching the HTML5 email regex.
+    ///
+    /// Returns an OSC8 hyperlink if matched, None otherwise.
+    fn parse_autolink(&self, chars: &[char], start: usize) -> Option<HtmlTagResult> {
+        if chars[start] != '<' {
+            return None;
+        }
+
+        // Find the closing '>'
+        let mut end = start + 1;
+        while end < chars.len() {
+            let ch = chars[end];
+            // Autolinks cannot contain whitespace, `<`, or control characters
+            if ch == '>' {
+                break;
+            }
+            if ch.is_whitespace() || ch == '<' || ch.is_control() {
+                return None;
+            }
+            end += 1;
+        }
+
+        if end >= chars.len() {
+            return None;
+        }
+
+        // Extract content between < and >
+        let content: String = chars[start + 1..end].iter().collect();
+
+        if content.is_empty() {
+            return None;
+        }
+
+        // Try URI autolink first: scheme ":" rest
+        // Scheme: 2-32 chars, starts with ASCII letter, followed by letters/digits/+/./-
+        if let Some(colon_pos) = content.find(':') {
+            let scheme = &content[..colon_pos];
+            if scheme.len() >= 2
+                && scheme.len() <= 32
+                && scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+                && scheme
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '.' || c == '-')
+            {
+                // Valid URI autolink
+                let url = &content;
+                let display = &content;
+                return Some(HtmlTagResult {
+                    formatted: format!(
+                        "\u{001b}]8;;{}\u{001b}\\\u{001b}[34;4m{}\u{001b}[0m\u{001b}]8;;\u{001b}\\",
+                        url, display
+                    ),
+                    end_pos: end + 1,
+                });
+            }
+        }
+
+        // Try email autolink: matches simplified HTML5 email regex
+        // local-part@domain where local-part and domain follow the spec patterns
+        if let Some(at_pos) = content.find('@') {
+            let local = &content[..at_pos];
+            let domain = &content[at_pos + 1..];
+
+            if !local.is_empty()
+                && !domain.is_empty()
+                && self.is_valid_email_local(local)
+                && self.is_valid_email_domain(domain)
+            {
+                let mailto_url = format!("mailto:{}", content);
+                let display = &content;
+                return Some(HtmlTagResult {
+                    formatted: format!(
+                        "\u{001b}]8;;{}\u{001b}\\\u{001b}[34;4m{}\u{001b}[0m\u{001b}]8;;\u{001b}\\",
+                        mailto_url, display
+                    ),
+                    end_pos: end + 1,
+                });
+            }
+        }
+
+        None
+    }
+
+    /// Check if a string is a valid email local-part per HTML5 spec.
+    /// Allowed: alphanumeric and .!#$%&'*+/=?^_`{|}~-
+    fn is_valid_email_local(&self, local: &str) -> bool {
+        !local.is_empty()
+            && local
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || ".!#$%&'*+/=?^_`{|}~-".contains(c))
+    }
+
+    /// Check if a string is a valid email domain per HTML5 spec.
+    /// Domain labels separated by dots, each 1-63 chars of alphanumeric/hyphen,
+    /// starting and ending with alphanumeric.
+    fn is_valid_email_domain(&self, domain: &str) -> bool {
+        if domain.is_empty() {
+            return false;
+        }
+
+        for label in domain.split('.') {
+            if label.is_empty() || label.len() > 63 {
+                return false;
+            }
+            // Must start with alphanumeric
+            if !label.starts_with(|c: char| c.is_ascii_alphanumeric()) {
+                return false;
+            }
+            // Must end with alphanumeric
+            if !label.ends_with(|c: char| c.is_ascii_alphanumeric()) {
+                return false;
+            }
+            // All chars must be alphanumeric or hyphen
+            if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+                return false;
+            }
+        }
+
+        true
+    }
+
     /// HTML comments (<!-- ... -->) are stripped entirely
     /// Unknown tags are stripped but inner content is preserved
     fn parse_html_tag(&self, chars: &[char], start: usize) -> Option<HtmlTagResult> {
