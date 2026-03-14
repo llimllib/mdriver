@@ -1521,3 +1521,39 @@ mod multi_backtick_code_spans {
         assert_eq!(stripped, " code ");
     }
 }
+
+#[test]
+fn test_ordered_list_autonumber() {
+    // All items use "1." but should render as 1, 2, 3
+    let mut p = parser();
+    p.feed("1. first\n1. second\n1. third\n");
+    let output = p.flush();
+    let plain = strip_ansi(&output);
+    assert!(plain.contains("1. first"), "should contain '1. first'");
+    assert!(plain.contains("2. second"), "should contain '2. second'");
+    assert!(plain.contains("3. third"), "should contain '3. third'");
+}
+
+#[test]
+fn test_ordered_list_autonumber_blank_separated() {
+    // Items separated by blank lines should still auto-number
+    let mut p = parser();
+    p.feed("1. first\n\n1. second\n\n1. third\n");
+    let output = p.flush();
+    let plain = strip_ansi(&output);
+    assert!(plain.contains("1. first"), "should contain '1. first'");
+    assert!(plain.contains("2. second"), "should contain '2. second'");
+    assert!(plain.contains("3. third"), "should contain '3. third'");
+}
+
+#[test]
+fn test_ordered_list_autonumber_start_number() {
+    // Starting number should be preserved (e.g., start at 3)
+    let mut p = parser();
+    p.feed("3. first\n1. second\n1. third\n");
+    let output = p.flush();
+    let plain = strip_ansi(&output);
+    assert!(plain.contains("3. first"), "should start at 3");
+    assert!(plain.contains("4. second"), "should continue at 4");
+    assert!(plain.contains("5. third"), "should continue at 5");
+}

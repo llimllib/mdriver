@@ -1,0 +1,26 @@
+name = "list-ordered-autonumber"
+description = "Ordered list items all numbered 1. should auto-number as 1, 2, 3"
+
+[[chunks]]
+input = "1. first\n"
+emit = ""
+
+[[chunks]]
+input = "1. second\n"
+emit = ""
+
+[[chunks]]
+input = "1. third\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = ""
+
+[[chunks]]
+input = "done\n"
+emit = "  1. first\n  2. second\n  3. third\n\n"
+
+[[chunks]]
+input = "\n"
+emit = "done\n\n"
