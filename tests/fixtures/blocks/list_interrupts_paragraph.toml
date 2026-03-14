@@ -1,0 +1,66 @@
+name = "list-interrupts-paragraph"
+description = "Lists should interrupt paragraphs per GFM spec §5.3"
+width = 80
+
+# GFM spec Example 283: unordered list interrupts paragraph
+[[chunks]]
+input = "Foo\n"
+emit = ""
+
+[[chunks]]
+input = "- bar\n"
+emit = "Foo\n\n"
+
+[[chunks]]
+input = "- baz\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = ""
+
+[[chunks]]
+input = "Next.\n"
+emit = "  • bar\n  • baz\n\n"
+
+[[chunks]]
+input = "\n"
+emit = "Next.\n\n"
+
+# Ordered list starting with 1 can interrupt a paragraph
+[[chunks]]
+input = "Foo\n"
+emit = ""
+
+[[chunks]]
+input = "1. bar\n"
+emit = "Foo\n\n"
+
+[[chunks]]
+input = "2. baz\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = ""
+
+[[chunks]]
+input = "Next.\n"
+emit = "  1. bar\n  2. baz\n\n"
+
+[[chunks]]
+input = "\n"
+emit = "Next.\n\n"
+
+# Ordered list NOT starting with 1 cannot interrupt a paragraph (Example 284)
+[[chunks]]
+input = "The number of windows in my house is\n"
+emit = ""
+
+[[chunks]]
+input = "14.  The number of doors is 6.\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = "The number of windows in my house is\n14. The number of doors is 6.\n\n"
