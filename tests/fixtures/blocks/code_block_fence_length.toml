@@ -1,0 +1,19 @@
+name = "code-block-fence-length"
+description = "Closing fence must be at least as long as opening fence (GFM spec §4.5, Example 94)"
+
+# A 4-backtick fence should not be closed by a 3-backtick line
+[[chunks]]
+input = "````\n"
+emit = ""
+
+[[chunks]]
+input = "aaa\n"
+emit = ""
+
+[[chunks]]
+input = "```\n"
+emit = ""
+
+[[chunks]]
+input = "``````\n"
+emit = "    \u001b[38;2;192;197;206maaa\n    \u001b[38;2;192;197;206m```\n\u001b[0m\n"
