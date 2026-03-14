@@ -480,6 +480,19 @@ impl StreamingParser {
             };
         }
 
+        // Check for ATX heading (# )
+        // Per GFM spec §4.2, ATX headings can interrupt paragraphs.
+        if let Some(level) = self.parse_atx_heading(trimmed) {
+            let raw_text = trimmed[level..].trim_start();
+            let text = self.strip_atx_closing(raw_text).to_string();
+            let output = self.emit_current_block();
+            let heading = self.format_heading(level, &text);
+            return match output {
+                Some(e) => Some(format!("{}{}", e, heading)),
+                None => Some(heading),
+            };
+        }
+
         // Check for fenced code block opening (``` or ~~~)
         // Per CommonMark spec, code fences can interrupt paragraphs
         if let Some((info, fence, indent_offset)) = self.parse_code_fence(trimmed) {
