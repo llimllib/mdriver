@@ -1,0 +1,29 @@
+name = "atx-heading-interrupts-paragraph"
+description = "ATX headings should interrupt paragraphs per GFM spec §4.2"
+width = 80
+
+# Example 48 from GFM spec: heading interrupts paragraph
+[[chunks]]
+input = "Foo bar\n"
+emit = ""
+
+[[chunks]]
+input = "# baz\n"
+emit = "Foo bar\n\n\u001b[1;34m# baz\u001b[0m\n\n"
+
+[[chunks]]
+input = "Bar foo\n\n"
+emit = "Bar foo\n\n"
+
+# h2 heading interrupts paragraph
+[[chunks]]
+input = "Some paragraph text here.\n"
+emit = ""
+
+[[chunks]]
+input = "## This should be a heading\n"
+emit = "Some paragraph text here.\n\n\u001b[1;34m## This should be a heading\u001b[0m\n\n"
+
+[[chunks]]
+input = "More text.\n\n"
+emit = "More text.\n\n"
