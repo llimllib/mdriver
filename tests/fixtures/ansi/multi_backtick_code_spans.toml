@@ -1,0 +1,28 @@
+name = "multi-backtick-code-spans"
+description = "Multi-backtick code spans per GFM spec §6.1"
+
+# Example 349: Double backtick code span containing a single backtick
+[[chunks]]
+input = "``foo`bar``\n\n"
+emit = "\u001b[38;5;167;48;5;235mfoo`bar \u001b[0m\n\n"
+
+# Example 350: Single backtick code span containing double backticks
+[[chunks]]
+input = "` foo `` bar `\n\n"
+emit = "\u001b[38;5;167;48;5;235mfoo `` bar \u001b[0m\n\n"
+
+# Example 339: Double backtick with space stripping
+[[chunks]]
+input = "`` foo ` bar ``\n\n"
+emit = "\u001b[38;5;167;48;5;235mfoo ` bar \u001b[0m\n\n"
+
+# Example 340: Single backtick wrapping double backticks (space stripping)
+[[chunks]]
+input = "` `` `\n\n"
+emit = "\u001b[38;5;167;48;5;235m`` \u001b[0m\n\n"
+
+# Example 357: Unmatched backtick strings are treated as literal
+# (prefixed with text so it's not interpreted as a code fence)
+[[chunks]]
+input = "text ```foo``\n\n"
+emit = "text ```foo``\n\n"

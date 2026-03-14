@@ -2215,15 +2215,53 @@ impl StreamingParser {
                 }
             }
 
-            // Check for `code`
+            // Check for `code` (including multi-backtick code spans like ``code``)
+            // Per GFM spec §6.1: A code span begins with a backtick string and ends
+            // with a backtick string of equal length.
             if chars[i] == '`' {
-                if let Some(end) = self.find_closing("`", &chars, i + 1) {
+                // Count consecutive opening backticks
+                let mut backtick_count = 0;
+                while i + backtick_count < chars.len() && chars[i + backtick_count] == '`' {
+                    backtick_count += 1;
+                }
+
+                let content_start = i + backtick_count;
+
+                // Search for exactly `backtick_count` consecutive closing backticks
+                if let Some(content_end) =
+                    self.find_closing_backticks(&chars, content_start, backtick_count)
+                {
+                    // Extract the raw content between the backtick strings
+                    let raw_content: String = chars[content_start..content_end].iter().collect();
+
+                    // Per GFM spec §6.1: Line endings are converted to spaces
+                    let content = raw_content.replace('\n', " ");
+
+                    // Per GFM spec §6.1: If the resulting string both begins AND ends
+                    // with a space, but does not consist entirely of spaces, strip one
+                    // space from front and back.
+                    let stripped = if content.starts_with(' ')
+                        && content.ends_with(' ')
+                        && !content.chars().all(|c| c == ' ')
+                    {
+                        &content[1..content.len() - 1]
+                    } else {
+                        &content
+                    };
+
                     result.push_str("\u{001b}[38;5;167;48;5;235m ");
-                    result.extend(&chars[i + 1..end]);
+                    result.push_str(stripped);
                     result.push_str(" \u{001b}[0m");
-                    i = end + 1;
+                    i = content_end + backtick_count;
                     continue;
                 }
+
+                // No matching closing backtick string found - treat as literal backticks
+                for _ in 0..backtick_count {
+                    result.push('`');
+                }
+                i += backtick_count;
+                continue;
             }
 
             // Check for __bold__ (underscore variant)
@@ -2923,6 +2961,33 @@ impl StreamingParser {
             }
 
             i += 1;
+        }
+        None
+    }
+
+    /// Find a closing backtick string of exactly `count` backticks.
+    /// Returns the position of the first backtick in the closing string.
+    /// Per GFM spec §6.1: the closing backtick string must be exactly `count`
+    /// backticks long (not part of a longer run of backticks).
+    fn find_closing_backticks(&self, chars: &[char], start: usize, count: usize) -> Option<usize> {
+        let mut i = start;
+        while i < chars.len() {
+            if chars[i] == '`' {
+                // Count consecutive backticks at this position
+                let run_start = i;
+                let mut run_len = 0;
+                while i < chars.len() && chars[i] == '`' {
+                    run_len += 1;
+                    i += 1;
+                }
+                // Only match if the run length is exactly `count`
+                if run_len == count {
+                    return Some(run_start);
+                }
+                // Otherwise skip past this run and keep searching
+            } else {
+                i += 1;
+            }
         }
         None
     }
