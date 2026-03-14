@@ -1,0 +1,42 @@
+name = "autolinks"
+description = "Test URI and email autolinks inside < and > rendered as OSC8 hyperlinks"
+
+# URI autolink - basic http
+[[chunks]]
+input = "<http://foo.bar.baz>\n\n"
+emit = "\u001b]8;;http://foo.bar.baz\u001b\\\u001b[34;4mhttp://foo.bar.baz\u001b[0m\u001b]8;;\u001b\\\n\n"
+
+# URI autolink - https with path and query
+[[chunks]]
+input = "<https://example.com/test?q=hello&id=22>\n\n"
+emit = "\u001b]8;;https://example.com/test?q=hello&id=22\u001b\\\u001b[34;4mhttps://example.com/test?q=hello&id=22\u001b[0m\u001b]8;;\u001b\\\n\n"
+
+# URI autolink - irc scheme
+[[chunks]]
+input = "<irc://foo.bar:2233/baz>\n\n"
+emit = "\u001b]8;;irc://foo.bar:2233/baz\u001b\\\u001b[34;4mirc://foo.bar:2233/baz\u001b[0m\u001b]8;;\u001b\\\n\n"
+
+# URI autolink - uppercase scheme
+[[chunks]]
+input = "<MAILTO:FOO@BAR.BAZ>\n\n"
+emit = "\u001b]8;;MAILTO:FOO@BAR.BAZ\u001b\\\u001b[34;4mMAILTO:FOO@BAR.BAZ\u001b[0m\u001b]8;;\u001b\\\n\n"
+
+# URI autolink - custom scheme
+[[chunks]]
+input = "<made-up-scheme://foo,bar>\n\n"
+emit = "\u001b]8;;made-up-scheme://foo,bar\u001b\\\u001b[34;4mmade-up-scheme://foo,bar\u001b[0m\u001b]8;;\u001b\\\n\n"
+
+# Email autolink
+[[chunks]]
+input = "<foo@bar.example.com>\n\n"
+emit = "\u001b]8;;mailto:foo@bar.example.com\u001b\\\u001b[34;4mfoo@bar.example.com\u001b[0m\u001b]8;;\u001b\\\n\n"
+
+# Email autolink with special chars
+[[chunks]]
+input = "<foo+special@Bar.baz-bar0.com>\n\n"
+emit = "\u001b]8;;mailto:foo+special@Bar.baz-bar0.com\u001b\\\u001b[34;4mfoo+special@Bar.baz-bar0.com\u001b[0m\u001b]8;;\u001b\\\n\n"
+
+# Autolink inline with other text
+[[chunks]]
+input = "Visit <https://example.com> for details.\n\n"
+emit = "Visit \u001b]8;;https://example.com\u001b\\\u001b[34;4mhttps://example.com\u001b[0m\u001b]8;;\u001b\\ for details.\n\n"
