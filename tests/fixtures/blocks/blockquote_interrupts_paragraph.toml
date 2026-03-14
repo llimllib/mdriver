@@ -1,0 +1,29 @@
+name = "blockquote-interrupts-paragraph"
+description = "Block quotes should interrupt paragraphs per GFM spec §5.1"
+width = 80
+
+# Example 222 from GFM spec: blockquote interrupts paragraph
+[[chunks]]
+input = "Foo\n"
+emit = ""
+
+[[chunks]]
+input = "> bar\n"
+emit = "Foo\n\n"
+
+[[chunks]]
+input = "\n"
+emit = " │ bar\n\n"
+
+# Another paragraph interrupted by blockquote with multiple lines
+[[chunks]]
+input = "Some paragraph text.\n"
+emit = ""
+
+[[chunks]]
+input = "> This should be a blockquote.\n> With multiple lines.\n"
+emit = "Some paragraph text.\n\n"
+
+[[chunks]]
+input = "\n"
+emit = " │ This should be a blockquote.\n │ With multiple lines.\n\n"
