@@ -1,0 +1,52 @@
+name = "intraword-underscores"
+description = "Intra-word underscores should not trigger emphasis (GFM spec §6.4)"
+
+# Simple intra-word underscores: foo_bar_baz should render literally
+[[chunks]]
+input = "foo_bar_baz\n\n"
+emit = "foo_bar_baz\n\n"
+
+# Multiple intra-word underscores
+[[chunks]]
+input = "foo_bar_baz_qux\n\n"
+emit = "foo_bar_baz_qux\n\n"
+
+# ALL_CAPS constant style
+[[chunks]]
+input = "MY_CONST_VALUE\n\n"
+emit = "MY_CONST_VALUE\n\n"
+
+# Function name style
+[[chunks]]
+input = "some_function_name\n\n"
+emit = "some_function_name\n\n"
+
+# Double underscores intra-word should not trigger bold
+[[chunks]]
+input = "foo__bar__baz\n\n"
+emit = "foo__bar__baz\n\n"
+
+# Underscore at start of word CAN open emphasis (left-flanking, not right-flanking)
+[[chunks]]
+input = "_italic_ word\n\n"
+emit = "\u001b[3mitalic\u001b[0m word\n\n"
+
+# Double underscore at start of word CAN open emphasis
+[[chunks]]
+input = "__bold__ word\n\n"
+emit = "\u001b[1mbold\u001b[0m word\n\n"
+
+# Mixed: asterisk emphasis works intra-word, underscore does not
+[[chunks]]
+input = "foo*bar*baz and foo_bar_baz\n\n"
+emit = "foo\u001b[3mbar\u001b[0mbaz and foo_bar_baz\n\n"
+
+# Underscore preceded by punctuation CAN open emphasis
+[[chunks]]
+input = "\"_foo_\"\n\n"
+emit = "\"\u001b[3mfoo\u001b[0m\"\n\n"
+
+# Single trailing underscore (no closing) should be literal
+[[chunks]]
+input = "foo_bar\n\n"
+emit = "foo_bar\n\n"
