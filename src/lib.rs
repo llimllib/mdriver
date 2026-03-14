@@ -522,6 +522,24 @@ impl StreamingParser {
             return output;
         }
 
+        // Check for list item (- or digit.)
+        // Per GFM spec §5.3, lists can interrupt paragraphs, but ordered lists
+        // can only interrupt paragraphs if they start with 1.
+        if let Some((indent, item_type)) = self.parse_list_item(trimmed) {
+            let can_interrupt = match &item_type {
+                ListItemType::Unordered => true,
+                ListItemType::Ordered(n) => *n == 1,
+            };
+            if can_interrupt {
+                let output = self.emit_current_block();
+                self.state = ParserState::InList;
+                self.current_block = BlockBuilder::List {
+                    items: vec![(indent, item_type, trimmed.to_string())],
+                };
+                return output;
+            }
+        }
+
         // Check if this might be a table delimiter row
         if let BlockBuilder::Paragraph { lines } = &self.current_block {
             if lines.len() == 1 && self.is_table_delimiter_row(trimmed) {
