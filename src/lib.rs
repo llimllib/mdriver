@@ -373,7 +373,8 @@ impl StreamingParser {
 
         // Check for ATX heading (# )
         if let Some(level) = self.parse_atx_heading(trimmed) {
-            let text = trimmed[level..].trim_start().to_string();
+            let raw_text = trimmed[level..].trim_start();
+            let text = self.strip_atx_closing(raw_text).to_string();
             // Headings complete on the same line - emit immediately
             return Some(self.format_heading(level, &text));
         }
@@ -812,6 +813,44 @@ impl StreamingParser {
             }
         }
         None
+    }
+
+    /// Strip an optional ATX closing sequence from heading content.
+    ///
+    /// Per GFM §4.2: The optional closing sequence of `#`s must be preceded
+    /// by a space and may be followed by spaces only. Backslash-escaped `#`
+    /// characters do not count as part of the closing sequence.
+    fn strip_atx_closing<'a>(&self, text: &'a str) -> &'a str {
+        let trimmed = text.trim_end();
+
+        if !trimmed.ends_with('#') {
+            return trimmed;
+        }
+
+        // Find the start of the trailing # sequence
+        let bytes = trimmed.as_bytes();
+        let mut hash_start = trimmed.len();
+        while hash_start > 0 && bytes[hash_start - 1] == b'#' {
+            hash_start -= 1;
+        }
+
+        // All content is #s — the heading is empty (e.g. "## ##" → empty h2)
+        if hash_start == 0 {
+            return "";
+        }
+
+        // Closing sequence must be preceded by a space (e.g. "foo#" keeps the #)
+        if bytes[hash_start - 1] != b' ' {
+            return trimmed;
+        }
+
+        // Backslash-escaped # doesn't count as closing (e.g. "foo \###" keeps the ###)
+        if hash_start >= 2 && bytes[hash_start - 2] == b'\\' {
+            return trimmed;
+        }
+
+        // Valid closing sequence — strip it and the preceding space
+        trimmed[..hash_start].trim_end()
     }
 
     fn parse_setext_underline(&self, line: &str) -> Option<usize> {

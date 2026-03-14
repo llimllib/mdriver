@@ -1,0 +1,32 @@
+name = "heading-atx-closing"
+description = "ATX headings should strip optional closing # sequences (GFM §4.2, Examples 41-46)"
+
+# Example 41: closing sequence same as opening
+[[chunks]]
+input = "## foo ##\n"
+emit = "\u001b[1;34m## foo\u001b[0m\n\n"
+
+# Example 42: closing sequence different length than opening
+[[chunks]]
+input = "# foo ##################################\n"
+emit = "\u001b[1;34m# foo\u001b[0m\n\n"
+
+# Example 42 continued: different levels
+[[chunks]]
+input = "##### foo ##\n"
+emit = "\u001b[1;34m##### foo\u001b[0m\n\n"
+
+# Example 43: spaces after closing sequence
+[[chunks]]
+input = "### foo ###     \n"
+emit = "\u001b[1;34m### foo\u001b[0m\n\n"
+
+# Example 44: content after # is NOT a closing sequence
+[[chunks]]
+input = "### foo ### b\n"
+emit = "\u001b[1;34m### foo ### b\u001b[0m\n\n"
+
+# Example 45: closing sequence must be preceded by a space
+[[chunks]]
+input = "# foo#\n"
+emit = "\u001b[1;34m# foo#\u001b[0m\n\n"
