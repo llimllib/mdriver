@@ -328,6 +328,7 @@ emit = "formatted output\n"  # Now it emits
 3. **Streaming vs Document**: Don't assume complete input - handle partial blocks
 4. **Empty Emissions**: Tests explicitly check for NO emission with `emit = ""`
 5. **ANSI Reset**: Always reset with `\u001b[0m` after formatting
+6. **`cargo run` passthrough mode**: When stdout is not a terminal (e.g., piping to `cat -v` or `xxd`), mdriver defaults to `--color=auto` which disables formatting and acts like `cat`. Use `cargo run -- --color=always` to force markdown rendering when testing manually via pipes.
 
 ## Current Status
 

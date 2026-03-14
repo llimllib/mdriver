@@ -1446,6 +1446,10 @@ impl StreamingParser {
     fn format_list(&self, items: &[(usize, ListItemType, String)]) -> String {
         let mut output = String::new();
 
+        // Track auto-numbering counters per nesting level.
+        // Key: nesting_level, Value: next number to use
+        let mut ordered_counters: HashMap<usize, usize> = HashMap::new();
+
         for (indent_level, item_type, item) in items {
             let trimmed = item.trim_start();
 
@@ -1491,11 +1495,17 @@ impl StreamingParser {
                     output.push('\n');
                 }
                 ListItemType::Ordered(num) => {
-                    // Use the original number from the markdown
-                    let first_indent = format!("{}  {}. ", indent, num);
+                    // Auto-number: use the first item's number as the start,
+                    // then increment for each subsequent item at this nesting level
+                    let display_num = *ordered_counters.entry(nesting_level).or_insert(*num);
+                    *ordered_counters.get_mut(&nesting_level).unwrap() = display_num + 1;
+                    let first_indent = format!("{}  {}. ", indent, display_num);
                     // Continuation indent aligns with content (after "N. ")
-                    let cont_indent =
-                        format!("{}  {}  ", indent, " ".repeat(num.to_string().len()));
+                    let cont_indent = format!(
+                        "{}  {}  ",
+                        indent,
+                        " ".repeat(display_num.to_string().len())
+                    );
                     let wrapped = self.wrap_text(&formatted_content, &first_indent, &cont_indent);
                     output.push_str(&wrapped);
                     output.push('\n');
