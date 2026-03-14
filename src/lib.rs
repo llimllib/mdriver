@@ -509,6 +509,19 @@ impl StreamingParser {
             return output;
         }
 
+        // Check for blockquote marker (> )
+        // Per GFM spec §5.1, block quotes can interrupt paragraphs.
+        if let Some(nesting_level) = self.parse_blockquote_marker(trimmed) {
+            let content = self.strip_blockquote_markers(trimmed, nesting_level);
+            let output = self.emit_current_block();
+            self.state = ParserState::InBlockquote { nesting_level };
+            self.current_block = BlockBuilder::Blockquote {
+                lines: vec![(nesting_level, content)],
+                current_nesting: nesting_level,
+            };
+            return output;
+        }
+
         // Check if this might be a table delimiter row
         if let BlockBuilder::Paragraph { lines } = &self.current_block {
             if lines.len() == 1 && self.is_table_delimiter_row(trimmed) {
