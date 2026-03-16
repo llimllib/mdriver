@@ -1,25 +1,31 @@
 name = "list-indented-code-after-blank"
-description = "Indented content after a blank line in a list should be treated as a code block"
+description = "Indented content after a blank line in a list is list continuation per GFM spec (not an indented code block)"
 
+# Start a list item
 [[chunks]]
 input = "3. Install homebrew\n"
 emit = ""
 
+# Blank line - could be loose list or end of list
 [[chunks]]
 input = "\n"
 emit = ""
 
+# 4-space indented content - list continuation paragraph, not indented code
+# Emits the list items, then starts a continuation paragraph
 [[chunks]]
 input = "    echo hello\n"
 emit = "  3. Install homebrew\n\n"
 
+# Blank line ends the continuation paragraph
 [[chunks]]
 input = "\n"
-emit = ""
+emit = "echo hello\n\n"
 
+# Next list item starts a new list
 [[chunks]]
 input = "4. Next item\n"
-emit = "    \u001b[38;2;192;197;206mecho hello\n\u001b[0m\n"
+emit = ""
 
 [[chunks]]
 input = "\n"

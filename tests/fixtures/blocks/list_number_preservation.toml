@@ -1,5 +1,5 @@
 name = "list-number-preservation"
-description = "List numbers should be preserved from markdown even when list is broken by code blocks"
+description = "List numbers should be preserved from markdown. Indented content after blank line is list continuation."
 
 [[chunks]]
 input = "1. First\n"
@@ -9,21 +9,26 @@ emit = ""
 input = "2. Second\n"
 emit = ""
 
+# Blank line in the list
 [[chunks]]
 input = "\n"
 emit = ""
 
+# 4-space indented content is list continuation per GFM spec
+# Emits the list items first, then starts continuation paragraph
 [[chunks]]
 input = "    code block\n"
 emit = "  1. First\n  2. Second\n\n"
 
+# Blank line ends the continuation paragraph
 [[chunks]]
 input = "\n"
-emit = ""
+emit = "code block\n\n"
 
+# New list item (number preserved)
 [[chunks]]
 input = "3. Third\n"
-emit = "    \u001b[38;2;192;197;206mcode block\n\u001b[0m\n"
+emit = ""
 
 [[chunks]]
 input = "\n"

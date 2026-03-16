@@ -77,6 +77,9 @@ pub struct StreamingParser {
     image_cache: HashMap<String, Vec<u8>>,
     /// Link reference definitions: normalized_label -> (url, optional_title)
     link_definitions: HashMap<String, (String, Option<String>)>,
+    /// Whether the current code block was opened from within list continuation.
+    /// When true, closing the code block returns to InListContinuation state.
+    in_list_continuation_context: bool,
 }
 
 /// Calculate the default output width: min(terminal_width, 80)
@@ -96,7 +99,8 @@ enum ParserState {
         indent_offset: usize,
     },
     InList,
-    InListAfterBlank, // In a list but just saw a blank line
+    InListAfterBlank,   // In a list but just saw a blank line
+    InListContinuation, // Processing indented continuation content within a list item
     InTable,
     InBlockquote {
         nesting_level: usize,
@@ -172,6 +176,7 @@ impl StreamingParser {
             width: default_width(),
             image_cache: HashMap::new(),
             link_definitions: HashMap::new(),
+            in_list_continuation_context: false,
         }
     }
 
@@ -188,6 +193,7 @@ impl StreamingParser {
             width,
             image_cache: HashMap::new(),
             link_definitions: HashMap::new(),
+            in_list_continuation_context: false,
         }
     }
 
@@ -351,6 +357,7 @@ impl StreamingParser {
             ParserState::InCodeBlock { .. } => self.handle_in_code_block(line),
             ParserState::InList => self.handle_in_list(line),
             ParserState::InListAfterBlank => self.handle_in_list_after_blank(line),
+            ParserState::InListContinuation => self.handle_in_list_continuation(line),
             ParserState::InTable => self.handle_in_table(line),
             ParserState::InBlockquote { .. } => self.handle_in_blockquote(line),
             ParserState::InIndentedCodeBlock => self.handle_in_indented_code_block(line),
@@ -593,7 +600,16 @@ impl StreamingParser {
                 .trim();
             if closing_len >= fence.len() && after_fence.is_empty() {
                 // Closing fence - emit the block
-                return self.emit_current_block();
+                let emission = self.emit_current_block();
+                // If this code block was opened from list continuation,
+                // return to that state so subsequent indented content
+                // continues to be processed as list continuation.
+                if self.in_list_continuation_context {
+                    self.state = ParserState::InListContinuation;
+                    // Don't clear the flag yet - it persists until we
+                    // exit list continuation (non-indented content)
+                }
+                return emission;
             }
 
             // Add line to code block, stripping the indent offset
@@ -723,7 +739,7 @@ impl StreamingParser {
 
             // Check for fenced code block first
             if let Some((info, fence, fence_indent)) = self.parse_code_fence(after_indent) {
-                // Emit the list, then start code block
+                // Emit the list, then start code block in list continuation context
                 let emission = self.emit_current_block();
                 self.state = ParserState::InCodeBlock {
                     info: info.clone(),
@@ -734,17 +750,27 @@ impl StreamingParser {
                     lines: Vec::new(),
                     info,
                 };
+                self.in_list_continuation_context = true;
                 return emission;
             }
 
-            // After a blank line, indented content is an indented code block
-            // Emit the list first, then start the indented code block
+            // Per GFM spec: list item interpretation takes precedence over
+            // indented code blocks. After a blank line in a list, 4-space
+            // indented content is list continuation, not an indented code block.
+            // Emit the list items seen so far, then process the continuation
+            // content (with indent stripped) as normal blocks.
             let emission = self.emit_current_block();
-            self.state = ParserState::InIndentedCodeBlock;
-            self.current_block = BlockBuilder::IndentedCodeBlock {
-                lines: vec![after_indent.to_string()],
+            // Strip the 4-space indent and process as a new block in list continuation
+            let stripped_line = format!("{}\n", after_indent);
+            let new_emission = self.handle_ready_state(&stripped_line);
+            // Override the state set by handle_ready_state to stay in list continuation
+            // (handle_ready_state may have set InParagraph, InList, etc.)
+            self.state = ParserState::InListContinuation;
+            return match (emission, new_emission) {
+                (Some(e1), Some(e2)) => Some(format!("{}{}", e1, e2)),
+                (Some(e), None) | (None, Some(e)) => Some(e),
+                (None, None) => None,
             };
-            return emission;
         }
 
         // Otherwise (blank line, non-indented content, or anything else), emit the list
@@ -760,6 +786,104 @@ impl StreamingParser {
             }
         } else {
             emission
+        }
+    }
+
+    /// Handle lines while in list continuation mode.
+    ///
+    /// After a blank line in a list, 4-space-indented content is list continuation
+    /// per the GFM spec. This handler strips the 4-space indent and delegates to
+    /// the appropriate block handler (paragraph, code block, etc.).
+    ///
+    /// When content is no longer indented (or we hit a blank line followed by
+    /// non-indented content), we exit list continuation.
+    fn handle_in_list_continuation(&mut self, line: &str) -> Option<String> {
+        let trimmed = line.trim_end_matches('\n');
+
+        // Blank line: could end continuation or separate blocks within it
+        if trimmed.is_empty() {
+            // If we're building a block (paragraph, etc), emit it
+            // Stay in list continuation to see if more indented content follows
+            let emission = self.emit_current_block();
+            // Transition: we need to check if next line is still indented
+            // Use InListContinuation state but with no current block - similar to
+            // InListAfterBlank but for continuation context
+            self.state = ParserState::InListContinuation;
+            return emission;
+        }
+
+        // Check if content is still indented (4+ spaces) - still in continuation
+        let leading_spaces = trimmed.len() - trimmed.trim_start().len();
+        if leading_spaces >= 4 {
+            let after_indent = &trimmed[4..];
+
+            // If we're currently in a code block within continuation, handle it
+            if let ParserState::InCodeBlock { .. } = &self.state {
+                // This shouldn't happen since InCodeBlock has its own handler,
+                // but handle gracefully
+                return self.handle_in_code_block(line);
+            }
+
+            // Check for code fence in the continuation content
+            if let Some((info, fence, fence_indent)) = self.parse_code_fence(after_indent) {
+                // Emit any current block (e.g., paragraph) first
+                let emission = self.emit_current_block();
+                self.state = ParserState::InCodeBlock {
+                    info: info.clone(),
+                    fence: fence.clone(),
+                    indent_offset: 4 + fence_indent,
+                };
+                self.current_block = BlockBuilder::CodeBlock {
+                    lines: Vec::new(),
+                    info,
+                };
+                self.in_list_continuation_context = true;
+                return emission;
+            }
+
+            // Otherwise, process the stripped content based on current block state
+            let stripped_line = format!("{}\n", after_indent);
+            match &self.current_block {
+                BlockBuilder::None => {
+                    // Start a new block with the stripped content
+                    let result = self.handle_ready_state(&stripped_line);
+                    // Make sure we stay in list continuation
+                    if self.state == ParserState::Ready
+                        || self.state == ParserState::InParagraph
+                        || self.state == ParserState::InList
+                    {
+                        // Keep the block builder but override state
+                        self.state = ParserState::InListContinuation;
+                    }
+                    return result;
+                }
+                BlockBuilder::Paragraph { .. } => {
+                    // Continue paragraph with stripped content
+                    let result = self.handle_in_paragraph(&stripped_line);
+                    // Stay in list continuation if paragraph didn't end
+                    if self.state == ParserState::Ready {
+                        self.state = ParserState::InListContinuation;
+                    }
+                    return result;
+                }
+                _ => {
+                    // For other block types, delegate to their handler
+                    let stripped_line = format!("{}\n", after_indent);
+                    return self.handle_ready_state(&stripped_line);
+                }
+            }
+        }
+
+        // Content is NOT indented enough - exit list continuation
+        // Emit any current block and process line normally
+        let emission = self.emit_current_block();
+        self.state = ParserState::Ready;
+        self.in_list_continuation_context = false;
+        let new_emission = self.handle_ready_state(line);
+        match (emission, new_emission) {
+            (Some(e1), Some(e2)) => Some(format!("{}{}", e1, e2)),
+            (Some(e), None) | (None, Some(e)) => Some(e),
+            (None, None) => None,
         }
     }
 

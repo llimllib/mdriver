@@ -1,0 +1,57 @@
+name = "ordered-list-code-fence-after-blank"
+description = "After a blank line in an ordered list, 4-space-indented content should be recognized as list continuation, not indented code. Fenced code blocks within list continuation should be syntax-highlighted."
+
+# Start the ordered list
+[[chunks]]
+input = "1. Install Claude Code:\n"
+emit = ""
+
+# Blank line - list continues (loose list)
+[[chunks]]
+input = "\n"
+emit = ""
+
+# 4-space indented paragraph - list continuation, not indented code
+# Emit the list item, start buffering continuation paragraph
+[[chunks]]
+input = "    **MacOS/Linux:**\n"
+emit = "  1. Install Claude Code:\n\n"
+
+# 4-space indented code fence opening - interrupts the continuation paragraph
+# Emit the paragraph, then start code block
+[[chunks]]
+input = "    ```bash\n"
+emit = "\u001b[1mMacOS/Linux:\u001b[0m\n\n"
+
+# Code content (indented 4 spaces, stripped to bare content)
+[[chunks]]
+input = "    curl -fsSL https://example.com | bash\n"
+emit = ""
+
+# Closing code fence (4-space indented)
+[[chunks]]
+input = "    ```\n"
+emit = "    \u001b[38;2;143;161;179mcurl\u001b[38;2;191;97;106m -\u001b[38;2;191;97;106mfsSL\u001b[38;2;192;197;206m https://example.com\u001b[38;2;192;197;206m \u001b[38;2;192;197;206m|\u001b[38;2;192;197;206m \u001b[38;2;143;161;179mbash\u001b[38;2;192;197;206m\n\u001b[0m\n"
+
+# Blank line before next item
+[[chunks]]
+input = "\n"
+emit = ""
+
+# Next list item - triggers exit from list continuation into new list
+[[chunks]]
+input = "2. Next step.\n"
+emit = ""
+
+# Another blank line followed by non-list, non-indented text triggers list emission
+[[chunks]]
+input = "\n"
+emit = ""
+
+[[chunks]]
+input = "Done.\n"
+emit = "  2. Next step.\n\n"
+
+[[chunks]]
+input = "\n"
+emit = "Done.\n\n"

@@ -1,0 +1,75 @@
+name = "list-continuation-multiple-code-blocks"
+description = "Multiple code blocks in list continuation should all be syntax-highlighted, not just the first one"
+
+# Start the ordered list
+[[chunks]]
+input = "1. Install Claude Code:\n"
+emit = ""
+
+# Blank line - loose list
+[[chunks]]
+input = "\n"
+emit = ""
+
+# First continuation paragraph (bold formatted)
+[[chunks]]
+input = "    **MacOS/Linux:**\n"
+emit = "  1. Install Claude Code:\n\n"
+
+# First code fence
+[[chunks]]
+input = "    ```bash\n"
+emit = "\u001b[1mMacOS/Linux:\u001b[0m\n\n"
+
+[[chunks]]
+input = "    curl -fsSL https://example.com | bash\n"
+emit = ""
+
+[[chunks]]
+input = "    ```\n"
+emit = "    \u001b[38;2;143;161;179mcurl\u001b[38;2;191;97;106m -\u001b[38;2;191;97;106mfsSL\u001b[38;2;192;197;206m https://example.com\u001b[38;2;192;197;206m \u001b[38;2;192;197;206m|\u001b[38;2;192;197;206m \u001b[38;2;143;161;179mbash\u001b[38;2;192;197;206m\n\u001b[0m\n"
+
+# Blank line between code blocks in continuation
+[[chunks]]
+input = "\n"
+emit = ""
+
+# Second continuation paragraph (bold formatted)
+[[chunks]]
+input = "    **Homebrew:**\n"
+emit = ""
+
+# Second code fence - this must also be syntax-highlighted
+[[chunks]]
+input = "    ```bash\n"
+emit = "\u001b[1mHomebrew:\u001b[0m\n\n"
+
+[[chunks]]
+input = "    brew install --cask claude-code\n"
+emit = ""
+
+[[chunks]]
+input = "    ```\n"
+emit = "    \u001b[38;2;143;161;179mbrew\u001b[38;2;192;197;206m install\u001b[38;2;191;97;106m --\u001b[38;2;191;97;106mcask\u001b[38;2;192;197;206m claude-code\u001b[38;2;192;197;206m\n\u001b[0m\n"
+
+# Blank line before next list item
+[[chunks]]
+input = "\n"
+emit = ""
+
+# Next list item
+[[chunks]]
+input = "2. Next step.\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = ""
+
+[[chunks]]
+input = "End.\n"
+emit = "  2. Next step.\n\n"
+
+[[chunks]]
+input = "\n"
+emit = "End.\n\n"
