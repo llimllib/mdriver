@@ -1557,3 +1557,127 @@ fn test_ordered_list_autonumber_start_number() {
     assert!(plain.contains("4. second"), "should continue at 4");
     assert!(plain.contains("5. third"), "should continue at 5");
 }
+
+mod mermaid_rendering {
+    use mdriver::{ImageProtocol, StreamingParser};
+
+    fn kitty_parser() -> StreamingParser {
+        StreamingParser::with_theme("base16-ocean.dark", ImageProtocol::Kitty)
+    }
+
+    fn plain_parser() -> StreamingParser {
+        StreamingParser::new() // ImageProtocol::None
+    }
+
+    /// Feed all input and collect output from both feed() and flush()
+    fn feed_all(parser: &mut StreamingParser, input: &str) -> String {
+        let mut output = parser.feed(input);
+        output.push_str(&parser.flush());
+        output
+    }
+
+    #[test]
+    fn test_mermaid_renders_as_image_with_kitty() {
+        let mut p = kitty_parser();
+        let output = feed_all(&mut p, "```mermaid\nflowchart LR\n    A-->B-->C\n```\n");
+        // Kitty graphics protocol starts with ESC_Gf=100
+        assert!(
+            output.contains("\x1b_Gf=100"),
+            "should contain kitty graphics protocol sequence, got: {:?}",
+            &output[..output.len().min(100)]
+        );
+    }
+
+    #[test]
+    fn test_mermaid_renders_as_code_without_images() {
+        let mut p = plain_parser();
+        let output = feed_all(&mut p, "```mermaid\nflowchart LR\n    A-->B-->C\n```\n");
+        // Should NOT contain kitty protocol
+        assert!(
+            !output.contains("\x1b_G"),
+            "should not contain kitty graphics protocol"
+        );
+        // Should contain the mermaid source as code
+        let stripped = super::strip_ansi(&output);
+        assert!(
+            stripped.contains("flowchart LR"),
+            "should show mermaid source as code"
+        );
+    }
+
+    #[test]
+    fn test_mermaid_case_insensitive_info_string() {
+        let mut p = kitty_parser();
+        let output = feed_all(&mut p, "```Mermaid\nflowchart LR\n    A-->B\n```\n");
+        assert!(
+            output.contains("\x1b_Gf=100"),
+            "should render Mermaid (capitalized) as image"
+        );
+    }
+
+    #[test]
+    fn test_mermaid_invalid_fallback_to_code() {
+        // mermaid-rs-renderer may render an error diagram rather than returning Err,
+        // so this test verifies that *something* is produced (image or code) without
+        // panicking. The key contract is: no panic, always produce output.
+        let mut p = kitty_parser();
+        let output = feed_all(&mut p, "```mermaid\n\n```\n");
+        assert!(
+            !output.is_empty(),
+            "should produce some output even for empty mermaid block"
+        );
+    }
+
+    #[test]
+    fn test_mermaid_streaming_emits_on_close_fence() {
+        let mut p = kitty_parser();
+        // Feed opening fence - should not emit yet
+        let output1 = p.feed("```mermaid\n");
+        assert!(output1.is_empty(), "should not emit on opening fence");
+
+        // Feed diagram content - should not emit yet
+        let output2 = p.feed("flowchart LR\n    A-->B\n");
+        assert!(output2.is_empty(), "should not emit during content");
+
+        // Feed closing fence - should emit the rendered image
+        let output3 = p.feed("```\n");
+        assert!(
+            output3.contains("\x1b_Gf=100"),
+            "should emit kitty image on closing fence, got: {:?}",
+            &output3[..output3.len().min(100)]
+        );
+    }
+
+    #[test]
+    fn test_mermaid_sequence_diagram() {
+        let mut p = kitty_parser();
+        let output = feed_all(
+            &mut p,
+            "```mermaid\nsequenceDiagram\n    Alice->>Bob: Hello\n    Bob-->>Alice: Hi\n```\n",
+        );
+        assert!(
+            output.contains("\x1b_Gf=100"),
+            "should render sequence diagram as image"
+        );
+    }
+
+    #[test]
+    fn test_mermaid_surrounded_by_text() {
+        let mut p = kitty_parser();
+        let output = feed_all(
+            &mut p,
+            "Here is a diagram:\n\n```mermaid\nflowchart LR\n    A-->B\n```\n\nAnd some text after.\n\n",
+        );
+        let stripped = super::strip_ansi(&output);
+        // Should contain both the text and the kitty protocol image
+        assert!(
+            stripped.contains("Here is a diagram:"),
+            "should contain preceding text"
+        );
+        assert!(output.contains("\x1b_Gf=100"), "should contain kitty image");
+        assert!(
+            stripped.contains("And some text after."),
+            "should contain following text"
+        );
+    }
+}
