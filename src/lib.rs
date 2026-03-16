@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
+use std::time::Duration;
 
 use htmlentity::entity::{decode as decode_html_entity_bytes, ICodedDataTrait};
 use syntect::easy::HighlightLines;
@@ -10,6 +11,10 @@ use unicode_width::UnicodeWidthStr;
 
 // Static theme set using two-face's extended themes
 static THEME_SET: LazyLock<EmbeddedLazyThemeSet> = LazyLock::new(two_face::theme::extra);
+
+/// Maximum time to wait for mermaid diagram rendering before falling back to
+/// displaying the source as a syntax-highlighted code block.
+const MERMAID_RENDER_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Column alignment in tables
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1488,6 +1493,14 @@ impl StreamingParser {
     }
 
     fn format_code_block(&self, lines: &[String], info: &str) -> String {
+        // Attempt to render mermaid diagrams as images when image protocol is enabled
+        if info.eq_ignore_ascii_case("mermaid") && self.image_protocol != ImageProtocol::None {
+            if let Some(rendered) = self.try_render_mermaid(lines) {
+                return rendered;
+            }
+            // Fall through to normal code block rendering on failure
+        }
+
         let mut output = String::new();
 
         // Map common aliases to their syntect language names
@@ -1537,6 +1550,36 @@ impl StreamingParser {
         // Add blank line after code block for spacing
         output.push('\n');
         output
+    }
+
+    /// Try to render a mermaid diagram as an inline terminal image.
+    /// Returns `Some(formatted_output)` on success, `None` on failure (parse error,
+    /// timeout, unsupported diagram type, etc.).
+    fn try_render_mermaid(&self, lines: &[String]) -> Option<String> {
+        let source = lines.join("\n");
+
+        // Render on a background thread with a timeout to avoid blocking
+        // the streaming output for complex diagrams.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let source_clone = source.clone();
+        std::thread::spawn(move || {
+            let result = mermaid_rs_renderer::render(&source_clone);
+            // Ignore send errors — receiver may have timed out and been dropped
+            let _ = tx.send(result);
+        });
+
+        let svg_string = match rx.recv_timeout(MERMAID_RENDER_TIMEOUT) {
+            Ok(Ok(svg)) => svg,
+            _ => return None, // Timeout or render error
+        };
+
+        let svg_bytes = svg_string.as_bytes();
+
+        // Use the existing SVG→raster→kitty pipeline
+        match self.process_image(svg_bytes) {
+            Ok(kitty_output) => Some(format!("{}\n", kitty_output)),
+            Err(_) => None,
+        }
     }
 
     /// Parse a task list item marker at the start of content.
