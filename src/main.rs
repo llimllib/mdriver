@@ -193,9 +193,9 @@ fn run() -> io::Result<()> {
     // Read from file, URL, or stdin
     let mut reader: Box<dyn Read> = if let Some(ref path) = file_path {
         if path.starts_with("http://") || path.starts_with("https://") {
-            let response = ureq::get(path).call().map_err(|e| {
-                io::Error::other(format!("Failed to fetch URL: {}", e))
-            })?;
+            let response = ureq::get(path)
+                .call()
+                .map_err(|e| io::Error::other(format!("Failed to fetch URL: {}", e)))?;
             Box::new(response.into_reader())
         } else {
             Box::new(File::open(path)?)
