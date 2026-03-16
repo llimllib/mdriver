@@ -2630,8 +2630,27 @@ impl StreamingParser {
         use resvg::tiny_skia::Pixmap;
         use resvg::usvg::{fontdb, Options, Tree};
 
-        // Load system fonts for text rendering
         let mut fontdb = fontdb::Database::new();
+
+        // Pre-load emoji fonts so they appear before .LastResort in the
+        // fontdb fallback iteration order. Without this, the default fallback
+        // selector finds .LastResort first (which has glyphs for everything
+        // but renders them as tofu boxes), and replaces the entire text span.
+        for path in &[
+            // macOS
+            "/System/Library/Fonts/Apple Color Emoji.ttc",
+            // Linux (common paths)
+            "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+            "/usr/share/fonts/noto-emoji/NotoColorEmoji.ttf",
+            "/usr/share/fonts/google-noto-emoji/NotoColorEmoji.ttf",
+            // Windows
+            "C:\\Windows\\Fonts\\seguiemj.ttf",
+        ] {
+            if std::path::Path::new(path).exists() {
+                let _ = fontdb.load_font_file(path);
+            }
+        }
+
         fontdb.load_system_fonts();
 
         let opts = Options {
