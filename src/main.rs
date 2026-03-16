@@ -12,7 +12,7 @@ fn print_help() {
     println!("mdriver - Streaming Markdown Printer");
     println!();
     println!("USAGE:");
-    println!("    mdriver [OPTIONS] [FILE]");
+    println!("    mdriver [OPTIONS] [FILE|URL]");
     println!();
     println!("OPTIONS:");
     println!("    --version, -V       Print version information");
@@ -24,7 +24,9 @@ fn print_help() {
     println!("    --color <WHEN>      When to use colors: auto, always, never (default: auto)");
     println!();
     println!("ARGS:");
-    println!("    <FILE>              Markdown file to render (reads from stdin if not provided)");
+    println!(
+        "    <FILE|URL>          Markdown file or URL to render (reads from stdin if not provided)"
+    );
     println!();
     println!("ENVIRONMENT:");
     println!("    MDRIVER_THEME       Default syntax highlighting theme (overridden by --theme)");
@@ -32,6 +34,7 @@ fn print_help() {
     println!();
     println!("EXAMPLES:");
     println!("    mdriver README.md");
+    println!("    mdriver https://raw.githubusercontent.com/user/repo/main/README.md");
     println!("    mdriver --theme \"Solarized (dark)\" README.md");
     println!("    mdriver --images kitty document.md");
     println!("    mdriver --width 100 document.md");
@@ -187,9 +190,16 @@ fn run() -> io::Result<()> {
 
     let mut buffer = [0u8; 4096];
 
-    // Read from file or stdin
-    let mut reader: Box<dyn Read> = if let Some(path) = file_path {
-        Box::new(File::open(path)?)
+    // Read from file, URL, or stdin
+    let mut reader: Box<dyn Read> = if let Some(ref path) = file_path {
+        if path.starts_with("http://") || path.starts_with("https://") {
+            let response = ureq::get(path).call().map_err(|e| {
+                io::Error::other(format!("Failed to fetch URL: {}", e))
+            })?;
+            Box::new(response.into_reader())
+        } else {
+            Box::new(File::open(path)?)
+        }
     } else {
         Box::new(io::stdin())
     };
