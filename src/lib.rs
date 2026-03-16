@@ -2630,8 +2630,6 @@ impl StreamingParser {
         use resvg::tiny_skia::Pixmap;
         use resvg::usvg::{fontdb, Options, Tree};
 
-        let mut fontdb = fontdb::Database::new();
-
         // Pre-load emoji fonts so they appear before .LastResort in the
         // fontdb fallback iteration order. resvg/usvg's default fallback
         // selector iterates fonts in insertion order to find one containing
@@ -2641,31 +2639,37 @@ impl StreamingParser {
         // When .LastResort is selected, usvg replaces the entire text span's
         // glyphs — even ASCII — causing all text to become tofu boxes.
         //
-        // By loading emoji fonts first, they get earlier positions in the
-        // database and are found before .LastResort during fallback.
-        //
-        // Known emoji font paths per platform:
-        //   macOS:   /System/Library/Fonts/Apple Color Emoji.ttc
-        //   Linux:   NotoColorEmoji.ttf (path varies by distro)
-        //   Windows: C:\Windows\Fonts\seguiemj.ttf
-        let emoji_font_paths: &[&str] = &[
-            // macOS
-            "/System/Library/Fonts/Apple Color Emoji.ttc",
-            // Linux (common distro paths for Noto Color Emoji)
-            "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
-            "/usr/share/fonts/noto-emoji/NotoColorEmoji.ttf",
-            "/usr/share/fonts/google-noto-emoji/NotoColorEmoji.ttf",
-            // Windows
-            "C:\\Windows\\Fonts\\seguiemj.ttf",
-        ];
-        let loaded_emoji_font = emoji_font_paths.iter().any(|path| {
-            if std::path::Path::new(path).exists() {
-                fontdb.load_font_file(path).is_ok()
-            } else {
-                false
-            }
-        });
-        if !loaded_emoji_font {
+        // To fix this, we load system fonts into a temporary database first,
+        // find the emoji font's file path by family name, then build the real
+        // database with the emoji font loaded first so it gets an earlier
+        // position in the iteration order.
+        let emoji_families = ["Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji"];
+        let emoji_path = {
+            let mut probe = fontdb::Database::new();
+            probe.load_system_fonts();
+            let path = probe
+                .faces()
+                .filter_map(|face| {
+                    let is_emoji = face
+                        .families
+                        .iter()
+                        .any(|(name, _)| emoji_families.iter().any(|ef| name == ef));
+                    if !is_emoji {
+                        return None;
+                    }
+                    match &face.source {
+                        fontdb::Source::File(path) => Some(path.clone()),
+                        _ => None,
+                    }
+                })
+                .next();
+            path
+        };
+
+        let mut fontdb = fontdb::Database::new();
+        if let Some(path) = &emoji_path {
+            let _ = fontdb.load_font_file(path);
+        } else {
             use std::sync::atomic::{AtomicBool, Ordering};
             static WARNED: AtomicBool = AtomicBool::new(false);
             if !WARNED.swap(true, Ordering::Relaxed) {
@@ -2675,7 +2679,6 @@ impl StreamingParser {
                 );
             }
         }
-
         fontdb.load_system_fonts();
 
         let opts = Options {
