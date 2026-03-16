@@ -2633,21 +2633,46 @@ impl StreamingParser {
         let mut fontdb = fontdb::Database::new();
 
         // Pre-load emoji fonts so they appear before .LastResort in the
-        // fontdb fallback iteration order. Without this, the default fallback
-        // selector finds .LastResort first (which has glyphs for everything
-        // but renders them as tofu boxes), and replaces the entire text span.
-        for path in &[
+        // fontdb fallback iteration order. resvg/usvg's default fallback
+        // selector iterates fonts in insertion order to find one containing
+        // a missing glyph. On macOS, .LastResort (a system font with glyph
+        // IDs for every codepoint but which renders them all as tofu) appears
+        // early in the database, while Apple Color Emoji appears much later.
+        // When .LastResort is selected, usvg replaces the entire text span's
+        // glyphs — even ASCII — causing all text to become tofu boxes.
+        //
+        // By loading emoji fonts first, they get earlier positions in the
+        // database and are found before .LastResort during fallback.
+        //
+        // Known emoji font paths per platform:
+        //   macOS:   /System/Library/Fonts/Apple Color Emoji.ttc
+        //   Linux:   NotoColorEmoji.ttf (path varies by distro)
+        //   Windows: C:\Windows\Fonts\seguiemj.ttf
+        let emoji_font_paths: &[&str] = &[
             // macOS
             "/System/Library/Fonts/Apple Color Emoji.ttc",
-            // Linux (common paths)
+            // Linux (common distro paths for Noto Color Emoji)
             "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
             "/usr/share/fonts/noto-emoji/NotoColorEmoji.ttf",
             "/usr/share/fonts/google-noto-emoji/NotoColorEmoji.ttf",
             // Windows
             "C:\\Windows\\Fonts\\seguiemj.ttf",
-        ] {
+        ];
+        let loaded_emoji_font = emoji_font_paths.iter().any(|path| {
             if std::path::Path::new(path).exists() {
-                let _ = fontdb.load_font_file(path);
+                fontdb.load_font_file(path).is_ok()
+            } else {
+                false
+            }
+        });
+        if !loaded_emoji_font {
+            use std::sync::atomic::{AtomicBool, Ordering};
+            static WARNED: AtomicBool = AtomicBool::new(false);
+            if !WARNED.swap(true, Ordering::Relaxed) {
+                eprintln!(
+                    "mdriver: warning: no emoji font found; \
+                     emoji in SVG/Mermaid diagrams may render incorrectly"
+                );
             }
         }
 
