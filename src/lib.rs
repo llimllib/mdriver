@@ -2630,8 +2630,55 @@ impl StreamingParser {
         use resvg::tiny_skia::Pixmap;
         use resvg::usvg::{fontdb, Options, Tree};
 
-        // Load system fonts for text rendering
+        // Pre-load emoji fonts so they appear before .LastResort in the
+        // fontdb fallback iteration order. resvg/usvg's default fallback
+        // selector iterates fonts in insertion order to find one containing
+        // a missing glyph. On macOS, .LastResort (a system font with glyph
+        // IDs for every codepoint but which renders them all as tofu) appears
+        // early in the database, while Apple Color Emoji appears much later.
+        // When .LastResort is selected, usvg replaces the entire text span's
+        // glyphs — even ASCII — causing all text to become tofu boxes.
+        //
+        // To fix this, we load system fonts into a temporary database first,
+        // find the emoji font's file path by family name, then build the real
+        // database with the emoji font loaded first so it gets an earlier
+        // position in the iteration order.
+        let emoji_families = ["Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji"];
+        let emoji_path = {
+            let mut probe = fontdb::Database::new();
+            probe.load_system_fonts();
+            let path = probe
+                .faces()
+                .filter_map(|face| {
+                    let is_emoji = face
+                        .families
+                        .iter()
+                        .any(|(name, _)| emoji_families.iter().any(|ef| name == ef));
+                    if !is_emoji {
+                        return None;
+                    }
+                    match &face.source {
+                        fontdb::Source::File(path) => Some(path.clone()),
+                        _ => None,
+                    }
+                })
+                .next();
+            path
+        };
+
         let mut fontdb = fontdb::Database::new();
+        if let Some(path) = &emoji_path {
+            let _ = fontdb.load_font_file(path);
+        } else {
+            use std::sync::atomic::{AtomicBool, Ordering};
+            static WARNED: AtomicBool = AtomicBool::new(false);
+            if !WARNED.swap(true, Ordering::Relaxed) {
+                eprintln!(
+                    "mdriver: warning: no emoji font found; \
+                     emoji in SVG/Mermaid diagrams may render incorrectly"
+                );
+            }
+        }
         fontdb.load_system_fonts();
 
         let opts = Options {
