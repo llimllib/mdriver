@@ -52,8 +52,7 @@ echo "Running cargo test..."
 cargo test
 
 # Commit and tag
-read -rp "Enter release message (or press enter for default): " MESSAGE
-MESSAGE="${MESSAGE:-Release v$NEW_VERSION}"
+MESSAGE="Release v$NEW_VERSION"
 
 git add Cargo.toml
 git commit -m "chore: bump version to $NEW_VERSION"
