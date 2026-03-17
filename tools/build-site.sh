@@ -25,6 +25,27 @@ rm -rf _site
 mkdir -p _site/transcripts
 
 # Build index.html from README
+# First, generate the HTML body content
+pandoc README.md -f markdown -t html -o _site/_body.html
+
+# Extract headings (h2 and h3) to build the TOC
+# Format: level|id|text
+TOC_ENTRIES=$(grep -oE '<h[23] id="[^"]*">[^<]*</h[23]>' _site/_body.html | \
+    sed -E 's/<h([23]) id="([^"]*)">([^<]*)<\/h[23]>/\1|\2|\3/')
+
+# Build the TOC HTML
+TOC_HTML='<nav class="toc-sidebar" id="toc-sidebar">'
+TOC_HTML+='<ul class="toc-list">'
+
+while IFS='|' read -r level id text; do
+    if [ -n "$level" ]; then
+        class="toc-h${level}"
+        TOC_HTML+="<li class=\"${class}\"><a href=\"#${id}\">${text}</a></li>"
+    fi
+done <<< "$TOC_ENTRIES"
+
+TOC_HTML+='</ul></nav>'
+
 cat > _site/index.html << HTMLEOF
 <!DOCTYPE html>
 <html lang="en">
@@ -33,13 +54,90 @@ cat > _site/index.html << HTMLEOF
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>mdriver - streaming markdown viewer</title>
   <style>
+    * {
+      box-sizing: border-box;
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
       line-height: 1.6;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 2rem;
+      margin: 0;
+      padding: 0;
       color: #333;
+    }
+    .top-nav {
+      background: #f8f9fa;
+      padding: 0.75rem 2rem;
+      border-bottom: 1px solid #e1e4e8;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .top-nav a {
+      margin-right: 1rem;
+      color: #0366d6;
+      text-decoration: none;
+    }
+    .top-nav a:hover {
+      text-decoration: underline;
+    }
+    .page-layout {
+      display: flex;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .toc-sidebar {
+      width: 240px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 52px; /* height of top-nav */
+      height: calc(100vh - 52px);
+      overflow-y: auto;
+      padding: 1.5rem 1rem 1.5rem 1.5rem;
+      border-right: 1px solid #e1e4e8;
+    }
+    .toc-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #666;
+      margin-bottom: 0.75rem;
+    }
+    .toc-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .toc-list li {
+      margin: 0;
+    }
+    .toc-list li a {
+      display: block;
+      padding: 0.2rem 0 0.2rem 0;
+      color: #555;
+      text-decoration: none;
+      font-size: 0.85rem;
+      border-left: 2px solid transparent;
+      padding-left: 0.75rem;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .toc-list li a:hover {
+      color: #0366d6;
+    }
+    .toc-list li a.active {
+      color: #0366d6;
+      border-left-color: #0366d6;
+      font-weight: 500;
+    }
+    .toc-h3 a {
+      padding-left: 1.5rem !important;
+      font-size: 0.8rem !important;
+    }
+    .main-content {
+      flex: 1;
+      min-width: 0;
+      max-width: 800px;
+      padding: 2rem;
     }
     pre {
       background: #f4f4f4;
@@ -78,29 +176,41 @@ cat > _site/index.html << HTMLEOF
     }
     h1, h2, h3 {
       margin-top: 1.5rem;
+      scroll-margin-top: 60px;
     }
-    nav {
-      background: #f8f9fa;
-      padding: 1rem;
-      margin-bottom: 2rem;
-      border-radius: 4px;
-    }
-    nav a {
-      margin-right: 1rem;
+    /* On narrow screens, hide the sidebar */
+    @media (max-width: 768px) {
+      .toc-sidebar {
+        display: none;
+      }
+      .main-content {
+        padding: 1rem;
+      }
     }
   </style>
 </head>
 <body>
-  <nav>
+  <nav class="top-nav">
     <a href="/">Home</a>
     <a href="./transcripts/">Transcripts</a>
     <a href="https://github.com/llimllib/mdriver">${GITHUB_ICON}GitHub</a>
   </nav>
+  <div class="page-layout">
+    ${TOC_HTML}
+    <main class="main-content">
 HTMLEOF
 
-pandoc README.md -f markdown -t html >> _site/index.html
+cat _site/_body.html >> _site/index.html
 
-echo '</body></html>' >> _site/index.html
+cat >> _site/index.html << 'HTMLEOF'
+    </main>
+  </div>
+</body>
+</html>
+HTMLEOF
+
+# Clean up temp file
+rm -f _site/_body.html
 
 # Copy docs (images, etc.)
 if [ -d docs ] && [ "$(ls -A docs)" ]; then
