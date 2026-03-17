@@ -21,6 +21,7 @@ fn print_help() {
     println!("    --theme <THEME>     Use specified syntax highlighting theme");
     println!("    --images <PROTOCOL> Enable image rendering (protocols: kitty)");
     println!("    --width <N>         Set output width for line wrapping (default: min(terminal width, 80))");
+    println!("    --padding <N>       Add N spaces of left padding to output (default: 0)");
     println!("    --color <WHEN>      When to use colors: auto, always, never (default: auto)");
     println!();
     println!("ARGS:");
@@ -31,6 +32,7 @@ fn print_help() {
     println!("ENVIRONMENT:");
     println!("    MDRIVER_THEME       Default syntax highlighting theme (overridden by --theme)");
     println!("    MDRIVER_WIDTH       Default output width (overridden by --width)");
+    println!("    MDRIVER_PADDING     Default left padding (overridden by --padding)");
     println!();
     println!("EXAMPLES:");
     println!("    mdriver README.md");
@@ -41,6 +43,34 @@ fn print_help() {
     println!("    mdriver --color=always README.md | less -R");
     println!("    cat file.md | mdriver");
     println!("    MDRIVER_THEME=\"InspiredGitHub\" mdriver file.md");
+}
+
+/// Prepend `padding` spaces to each line of text.
+/// The trailing empty string from a final `\n` is not padded, so we don't
+/// add a spurious trailing line of spaces.
+fn apply_padding(text: &str, padding: usize) -> String {
+    if padding == 0 || text.is_empty() {
+        return text.to_string();
+    }
+
+    let pad = " ".repeat(padding);
+    let lines: Vec<&str> = text.split('\n').collect();
+    let last_idx = lines.len() - 1;
+    let mut result = String::new();
+
+    for (i, line) in lines.iter().enumerate() {
+        if i > 0 {
+            result.push('\n');
+        }
+        // Don't pad the trailing empty string that results from a final \n
+        if i == last_idx && line.is_empty() {
+            continue;
+        }
+        result.push_str(&pad);
+        result.push_str(line);
+    }
+
+    result
 }
 
 /// Color output mode
@@ -58,6 +88,7 @@ fn run() -> io::Result<()> {
     // Parse arguments
     let mut theme: Option<String> = None;
     let mut width: Option<usize> = None;
+    let mut padding: Option<usize> = None;
     let mut image_protocol = mdriver::ImageProtocol::None;
     let mut color_mode = ColorMode::Auto;
     let mut file_path: Option<String> = None;
@@ -125,6 +156,25 @@ fn run() -> io::Result<()> {
                     }
                 } else {
                     eprintln!("Error: --width requires a number");
+                    eprintln!("Run 'mdriver --help' for usage information");
+                    std::process::exit(1);
+                }
+            }
+            "--padding" => {
+                if i + 1 < args.len() {
+                    match args[i + 1].parse::<usize>() {
+                        Ok(p) => {
+                            padding = Some(p);
+                            i += 2;
+                        }
+                        _ => {
+                            eprintln!("Error: --padding requires a non-negative integer");
+                            eprintln!("Run 'mdriver --help' for usage information");
+                            std::process::exit(1);
+                        }
+                    }
+                } else {
+                    eprintln!("Error: --padding requires a number");
                     eprintln!("Run 'mdriver --help' for usage information");
                     std::process::exit(1);
                 }
@@ -215,8 +265,29 @@ fn run() -> io::Result<()> {
         // Get width from parameter, environment variable, or use default
         let width = width.or_else(|| env::var("MDRIVER_WIDTH").ok().and_then(|s| s.parse().ok()));
 
+        // Get padding from parameter, environment variable, or default to 0
+        let padding = padding
+            .or_else(|| {
+                env::var("MDRIVER_PADDING")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+            })
+            .unwrap_or(0);
+
+        // Reduce the effective width by the padding so wrapping accounts for it
         let mut parser = if let Some(w) = width {
-            StreamingParser::with_width(&theme, image_protocol, w)
+            let effective = if w > padding { w - padding } else { 1 };
+            StreamingParser::with_width(&theme, image_protocol, effective)
+        } else if padding > 0 {
+            let default_w = term_size::dimensions()
+                .map(|(w, _)| w.min(80))
+                .unwrap_or(80);
+            let effective = if default_w > padding {
+                default_w - padding
+            } else {
+                1
+            };
+            StreamingParser::with_width(&theme, image_protocol, effective)
         } else {
             StreamingParser::with_theme(&theme, image_protocol)
         };
@@ -230,12 +301,12 @@ fn run() -> io::Result<()> {
 
             let chunk = String::from_utf8_lossy(&buffer[..bytes_read]);
             let output = parser.feed(&chunk);
-            write!(stdout, "{}", output)?;
+            write!(stdout, "{}", apply_padding(&output, padding))?;
         }
 
         // Flush any remaining buffered content
         let output = parser.flush();
-        write!(stdout, "{}", output)?;
+        write!(stdout, "{}", apply_padding(&output, padding))?;
     } else {
         // Passthrough mode: act like cat, no formatting
         loop {
