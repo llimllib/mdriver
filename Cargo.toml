@@ -31,6 +31,13 @@ mermaid-rs-renderer = { version = "0.2", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.9"
 
+[lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+allow_attributes_without_reason = "deny"
+unwrap_used = "deny"
+
 [profile.release]
 lto = true
 codegen-units = 1

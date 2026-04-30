@@ -86,26 +86,26 @@ fn run_tests_in_directory(dir: &str) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_block_fixtures() {
-    run_tests_in_directory("blocks").unwrap();
+fn test_block_fixtures() -> Result<(), Box<dyn std::error::Error>> {
+    run_tests_in_directory("blocks")
 }
 
 #[test]
-fn test_streaming_fixtures() {
-    run_tests_in_directory("streaming").unwrap();
+fn test_streaming_fixtures() -> Result<(), Box<dyn std::error::Error>> {
+    run_tests_in_directory("streaming")
 }
 
 #[test]
-fn test_ansi_fixtures() {
-    run_tests_in_directory("ansi").unwrap();
+fn test_ansi_fixtures() -> Result<(), Box<dyn std::error::Error>> {
+    run_tests_in_directory("ansi")
 }
 
 #[test]
-fn test_complex_fixtures() {
-    run_tests_in_directory("complex").unwrap();
+fn test_complex_fixtures() -> Result<(), Box<dyn std::error::Error>> {
+    run_tests_in_directory("complex")
 }
 
 #[test]
-fn test_wrapping_fixtures() {
-    run_tests_in_directory("wrapping").unwrap();
+fn test_wrapping_fixtures() -> Result<(), Box<dyn std::error::Error>> {
+    run_tests_in_directory("wrapping")
 }

@@ -121,8 +121,8 @@ enum BlockBuilder {
     },
     CodeBlock {
         lines: Vec<String>,
-        #[allow(dead_code)]
-        info: String, // Language info for future syntax highlighting
+        #[allow(dead_code, reason = "reserved for future syntax highlighting")]
+        info: String,
     },
     List {
         items: Vec<(usize, ListItemType, String)>, // (indentation_level, type, content)
@@ -1662,10 +1662,9 @@ impl StreamingParser {
                     output.push('\n');
                 }
                 ListItemType::Ordered(num) => {
-                    // Auto-number: use the first item's number as the start,
-                    // then increment for each subsequent item at this nesting level
-                    let display_num = *ordered_counters.entry(nesting_level).or_insert(*num);
-                    *ordered_counters.get_mut(&nesting_level).unwrap() = display_num + 1;
+                    let counter = ordered_counters.entry(nesting_level).or_insert(*num);
+                    let display_num = *counter;
+                    *counter = display_num + 1;
                     let first_indent = format!("{}  {}. ", indent, display_num);
                     // Continuation indent aligns with content (after "N. ")
                     let cont_indent = format!(
@@ -2721,7 +2720,7 @@ impl StreamingParser {
         let chunks: Vec<&str> = encoded
             .as_bytes()
             .chunks(chunk_size)
-            .map(|chunk| std::str::from_utf8(chunk).unwrap())
+            .map(|chunk| std::str::from_utf8(chunk).expect("base64 is ASCII, chunks never split a codepoint"))
             .collect();
 
         for (i, chunk) in chunks.iter().enumerate() {
