@@ -2720,7 +2720,9 @@ impl StreamingParser {
         let chunks: Vec<&str> = encoded
             .as_bytes()
             .chunks(chunk_size)
-            .map(|chunk| std::str::from_utf8(chunk).expect("base64 is ASCII, chunks never split a codepoint"))
+            .map(|chunk| {
+                std::str::from_utf8(chunk).expect("base64 is ASCII, chunks never split a codepoint")
+            })
             .collect();
 
         for (i, chunk) in chunks.iter().enumerate() {
