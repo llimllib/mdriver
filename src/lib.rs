@@ -307,7 +307,7 @@ impl StreamingParser {
         if src.starts_with("http://") || src.starts_with("https://") {
             let response = ureq::get(src).call()?;
             let mut bytes = Vec::new();
-            std::io::Read::read_to_end(&mut response.into_reader(), &mut bytes)?;
+            std::io::Read::read_to_end(&mut response.into_body().into_reader(), &mut bytes)?;
             Ok(bytes)
         } else {
             std::fs::read(src).map_err(|e| e.into())
@@ -2556,7 +2556,7 @@ impl StreamingParser {
             // Fetch remote image
             let response = ureq::get(src).call()?;
             let mut bytes = Vec::new();
-            std::io::Read::read_to_end(&mut response.into_reader(), &mut bytes)?;
+            std::io::Read::read_to_end(&mut response.into_body().into_reader(), &mut bytes)?;
             Ok(bytes)
         } else {
             // Load local file
