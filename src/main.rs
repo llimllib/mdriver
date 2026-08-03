@@ -246,7 +246,7 @@ fn run() -> io::Result<()> {
             let response = ureq::get(path)
                 .call()
                 .map_err(|e| io::Error::other(format!("Failed to fetch URL: {}", e)))?;
-            Box::new(response.into_reader())
+            Box::new(response.into_body().into_reader())
         } else {
             Box::new(File::open(path)?)
         }
