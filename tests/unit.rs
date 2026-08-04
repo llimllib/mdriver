@@ -1617,13 +1617,36 @@ mod mermaid_rendering {
 
     #[test]
     fn test_mermaid_invalid_fallback_to_code() {
-        // this test verifies that *something* is produced (image or code) from an empty block
-        // without panicking. The key contract is: no panic, always produce output.
+        // merman returns typed errors for undetectable/unparseable diagrams (unlike the
+        // old mermaid-rs-renderer, which returned a blank 16x16 SVG), so each of these
+        // must fall back to a highlighted code block rather than emitting an image.
+        for input in [
+            "```mermaid\n\n```\n",                           // empty
+            "```mermaid\nflowchart LR\n  A[unclosed\n```\n", // unterminated node label
+            "```mermaid\nnotADiagramType\n  a b c\n```\n",   // unknown diagram type
+        ] {
+            let mut p = kitty_parser();
+            let output = feed_all(&mut p, input);
+            assert!(
+                !output.contains("\x1b_G"),
+                "invalid mermaid should not emit a kitty image, input: {:?}",
+                input
+            );
+            assert!(
+                !output.is_empty(),
+                "invalid mermaid should still produce output, input: {:?}",
+                input
+            );
+        }
+
+        // The fallback must show the original mermaid source as code.
         let mut p = kitty_parser();
-        let output = feed_all(&mut p, "```mermaid\n\n```\n");
+        let output = feed_all(&mut p, "```mermaid\nnotADiagramType\n  a b c\n```\n");
+        let stripped = super::strip_ansi(&output);
         assert!(
-            !output.is_empty(),
-            "should produce some output even for empty mermaid block"
+            stripped.contains("notADiagramType"),
+            "fallback should show mermaid source as code, got: {:?}",
+            stripped
         );
     }
 
@@ -1678,5 +1701,185 @@ mod mermaid_rendering {
             stripped.contains("And some text after."),
             "should contain following text"
         );
+    }
+
+    /// Decode the base64 PNG payload out of a kitty graphics escape sequence.
+    ///
+    /// The payload is split across `\x1b_Gf=100,...;<data>\x1b\\` plus zero or more
+    /// `\x1b_Gm=<0|1>;<data>\x1b\\` continuation chunks.
+    fn decode_kitty_png(output: &str) -> Vec<u8> {
+        use base64::Engine;
+
+        let mut b64 = String::new();
+        let mut rest = output;
+        while let Some(start) = rest.find("\x1b_G") {
+            let after = &rest[start + 3..];
+            let Some(semi) = after.find(';') else { break };
+            let Some(end) = after.find("\x1b\\") else {
+                break;
+            };
+            if semi < end {
+                b64.push_str(&after[semi + 1..end]);
+            }
+            rest = &after[end + 2..];
+        }
+        assert!(!b64.is_empty(), "no kitty payload found in output");
+        base64::engine::general_purpose::STANDARD
+            .decode(b64.as_bytes())
+            .expect("kitty payload should be valid base64")
+    }
+
+    /// Count dark (glyph-colored) pixels in the decoded image.
+    ///
+    /// Mermaid diagrams use light fills with dark strokes and dark text, so the count of
+    /// near-black pixels is a proxy for "how much ink is on the page". Diagrams whose
+    /// labels were dropped (the `foreignObject` bug) draw only shape outlines and land
+    /// far below the thresholds asserted here.
+    fn dark_pixel_count(png: &[u8]) -> usize {
+        let img = image::load_from_memory_with_format(png, image::ImageFormat::Png)
+            .expect("kitty payload should decode as PNG")
+            .to_rgba8();
+        img.pixels()
+            .filter(|p| p.0[3] > 128 && p.0[0] < 120 && p.0[1] < 120 && p.0[2] < 120)
+            .count()
+    }
+
+    /// True if this system has a font that can actually draw Latin text.
+    ///
+    /// resvg can only rasterize glyphs it has a font for. On a machine with no text font
+    /// (e.g. a bare container, or a GitHub runner that ships only an emoji font) every
+    /// label is dropped no matter how the SVG was produced, so the pixel-count assertions
+    /// below would fail for a reason unrelated to what they test. Detect that and skip.
+    ///
+    /// This deliberately asks resvg to use each installed family *by explicit name*, rather
+    /// than going through mdriver's rendering path or the generic `sans-serif` alias. If it
+    /// relied on either, a regression in mdriver's own font handling would make this return
+    /// false and silently skip the very tests meant to catch it.
+    fn has_text_font() -> bool {
+        use resvg::tiny_skia::Pixmap;
+        use resvg::usvg::{fontdb, Options, Tree};
+
+        let probe = concat!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80">"#,
+            r#"<text x="5" y="60" font-size="64" fill="black">HHH</text></svg>"#
+        );
+
+        let mut db = fontdb::Database::new();
+        db.load_system_fonts();
+
+        let mut families: Vec<String> = db
+            .faces()
+            .flat_map(|face| face.families.iter().map(|(name, _)| name.clone()))
+            .collect();
+        families.sort();
+        families.dedup();
+
+        families.iter().any(|family| {
+            let mut db = fontdb::Database::new();
+            db.load_system_fonts();
+            let opts = Options {
+                font_family: family.clone(),
+                fontdb: std::sync::Arc::new(db),
+                ..Options::default()
+            };
+            let Ok(tree) = Tree::from_str(probe, &opts) else {
+                return false;
+            };
+            let size = tree.size();
+            let Some(mut pixmap) = Pixmap::new(size.width() as u32, size.height() as u32) else {
+                return false;
+            };
+            resvg::render(
+                &tree,
+                resvg::tiny_skia::Transform::default(),
+                &mut pixmap.as_mut(),
+            );
+            let ink = pixmap
+                .pixels()
+                .iter()
+                .filter(|p| p.alpha() > 128 && p.red() < 120 && p.green() < 120 && p.blue() < 120)
+                .count();
+            ink > 50
+        })
+    }
+
+    /// Regression test for the `foreignObject` bug: flowchart labels live inside
+    /// `<foreignObject>` in Mermaid-parity SVG, which resvg silently skips. Rendering must
+    /// go through merman's resvg-safe pipeline so labels become native SVG `<text>`.
+    ///
+    /// Before the fix this diagram rasterized to 114 dark pixels (shape outlines only);
+    /// after it produces ~700, so 400 is a comfortable regression boundary.
+    #[test]
+    fn test_mermaid_flowchart_labels_are_rasterized() {
+        if !has_text_font() {
+            eprintln!("skipping: no Latin text font available to rasterize labels");
+            return;
+        }
+        let mut p = kitty_parser();
+        let output = feed_all(
+            &mut p,
+            "```mermaid\nflowchart LR\n  A[Client] -->|HTTP| B(Gateway)\n  B --> C{Auth?}\n```\n",
+        );
+        let dark = dark_pixel_count(&decode_kitty_png(&output));
+        assert!(
+            dark > 400,
+            "flowchart node/edge labels appear to be missing: only {} dark pixels \
+             (unlabeled shapes render ~114, labeled shapes render ~700). Either \
+             try_render_mermaid regressed to render_svg_sync (foreignObject labels \
+             resvg cannot draw), or render_svg stopped mapping the generic CSS font \
+             families onto fonts that exist on this system.",
+            dark
+        );
+    }
+
+    /// Same regression, for a diagram family whose class-member text is also HTML-labeled.
+    /// Before the fix: 117 dark pixels. After: ~760.
+    #[test]
+    fn test_mermaid_class_diagram_labels_are_rasterized() {
+        if !has_text_font() {
+            eprintln!("skipping: no Latin text font available to rasterize labels");
+            return;
+        }
+        let mut p = kitty_parser();
+        let output = feed_all(
+            &mut p,
+            "```mermaid\nclassDiagram\n    class Animal {\n        +String name\n        \
+             +eat() void\n    }\n    class Dog {\n        +bark() void\n    }\n    \
+             Animal <|-- Dog\n```\n",
+        );
+        let dark = dark_pixel_count(&decode_kitty_png(&output));
+        assert!(
+            dark > 450,
+            "class diagram member text appears to be missing: only {} dark pixels \
+             (empty boxes render ~117, populated boxes render ~760)",
+            dark
+        );
+    }
+
+    /// The SVG handed to resvg must not contain `foreignObject`, since resvg does not
+    /// implement it and drops the contents without warning.
+    #[test]
+    fn test_mermaid_svg_has_no_foreign_objects() {
+        for source in [
+            "flowchart LR\n  A[Client] -->|HTTP| B(Gateway)\n",
+            "classDiagram\n    class Animal {\n        +String name\n    }\n",
+            "stateDiagram-v2\n    [*] --> Still\n    Still --> Moving\n",
+            "erDiagram\n    CUSTOMER ||--o{ ORDER : places\n",
+        ] {
+            let svg = merman::render::HeadlessRenderer::new()
+                .render_svg_resvg_safe_sync(source)
+                .expect("render should succeed")
+                .expect("diagram type should be detected");
+            assert!(
+                !svg.contains("foreignObject"),
+                "resvg-safe SVG still contains foreignObject for source: {:?}",
+                source
+            );
+            assert!(
+                svg.contains("<text"),
+                "resvg-safe SVG should carry native <text> labels for source: {:?}",
+                source
+            );
+        }
     }
 }
