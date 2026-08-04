@@ -1560,7 +1560,12 @@ impl StreamingParser {
         let (tx, rx) = std::sync::mpsc::channel();
         let source_clone = source.clone();
         std::thread::spawn(move || {
-            let result = merman::render::HeadlessRenderer::new().render_svg_sync(&source_clone);
+            // Use the resvg-safe pipeline: Mermaid-parity SVG puts labels inside
+            // <foreignObject> HTML for flowcharts, class/ER/state diagrams, mindmaps and
+            // kanban. resvg does not implement foreignObject, so those labels would be
+            // silently dropped. This pipeline converts HTML labels to native SVG <text>.
+            let result =
+                merman::render::HeadlessRenderer::new().render_svg_resvg_safe_sync(&source_clone);
             // Ignore send errors — receiver may have timed out and been dropped
             let _ = tx.send(result);
         });
