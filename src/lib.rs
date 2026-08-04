@@ -2626,6 +2626,84 @@ impl StreamingParser {
             || trimmed.starts_with("<!DOCTYPE svg")
     }
 
+    /// Point fontdb's generic family aliases at fonts that exist on this system.
+    ///
+    /// fontdb ships hardcoded defaults (`Arial`, `Times New Roman`, `Courier New`) that are
+    /// Windows/macOS names. When none of them are installed, usvg cannot resolve a text
+    /// run's family stack and skips the text without warning. We probe a list of common
+    /// equivalents per generic family and fall back to any available face so that text
+    /// always renders, even if the exact typeface differs.
+    fn map_generic_font_families(db: &mut resvg::usvg::fontdb::Database) {
+        fn find(db: &resvg::usvg::fontdb::Database, candidates: &[&str]) -> Option<String> {
+            candidates.iter().find_map(|want| {
+                db.faces()
+                    .flat_map(|face| face.families.iter())
+                    .find(|(name, _)| name.eq_ignore_ascii_case(want))
+                    .map(|(name, _)| name.clone())
+            })
+        }
+
+        // Any face at all, used as a last resort so text is never dropped outright.
+        let any = db
+            .faces()
+            .next()
+            .and_then(|face| face.families.first().map(|(name, _)| name.clone()));
+
+        let sans = find(
+            db,
+            &[
+                "Arial",
+                "Helvetica",
+                "Liberation Sans",
+                "DejaVu Sans",
+                "Noto Sans",
+                "FreeSans",
+                "Nimbus Sans",
+                "Ubuntu",
+                "Cantarell",
+            ],
+        )
+        .or_else(|| any.clone());
+
+        let serif = find(
+            db,
+            &[
+                "Times New Roman",
+                "Liberation Serif",
+                "DejaVu Serif",
+                "Noto Serif",
+                "FreeSerif",
+                "Nimbus Roman",
+            ],
+        )
+        .or_else(|| sans.clone());
+
+        let mono = find(
+            db,
+            &[
+                "Courier New",
+                "Liberation Mono",
+                "DejaVu Sans Mono",
+                "Noto Sans Mono",
+                "FreeMono",
+                "Nimbus Mono PS",
+                "Menlo",
+                "Consolas",
+            ],
+        )
+        .or_else(|| sans.clone());
+
+        if let Some(name) = sans {
+            db.set_sans_serif_family(name);
+        }
+        if let Some(name) = serif {
+            db.set_serif_family(name);
+        }
+        if let Some(name) = mono {
+            db.set_monospace_family(name);
+        }
+    }
+
     /// Render SVG to a raster image using resvg
     fn render_svg(&self, data: &[u8]) -> Result<image::DynamicImage, Box<dyn std::error::Error>> {
         use resvg::tiny_skia::Pixmap;
@@ -2681,6 +2759,15 @@ impl StreamingParser {
             }
         }
         fontdb.load_system_fonts();
+
+        // Point the generic CSS families (sans-serif, serif, monospace) at fonts that
+        // actually exist here. fontdb defaults them to "Arial"/"Times New Roman"/"Courier
+        // New", which are absent on most Linux systems and minimal containers. usvg does
+        // not fall back to an arbitrary installed font when the whole family stack is
+        // unresolvable — it drops the text run entirely and silently. Mermaid asks for
+        // `"trebuchet ms",verdana,arial,sans-serif`, so on a box with none of those and an
+        // unmapped `sans-serif`, every label vanishes while shapes still draw.
+        Self::map_generic_font_families(&mut fontdb);
 
         let opts = Options {
             fontdb: std::sync::Arc::new(fontdb),

@@ -1744,14 +1744,77 @@ mod mermaid_rendering {
             .count()
     }
 
+    /// True if this system has a font that can actually draw Latin text.
+    ///
+    /// resvg can only rasterize glyphs it has a font for. On a machine with no text font
+    /// (e.g. a bare container, or a GitHub runner that ships only an emoji font) every
+    /// label is dropped no matter how the SVG was produced, so the pixel-count assertions
+    /// below would fail for a reason unrelated to what they test. Detect that and skip.
+    ///
+    /// This deliberately asks resvg to use each installed family *by explicit name*, rather
+    /// than going through mdriver's rendering path or the generic `sans-serif` alias. If it
+    /// relied on either, a regression in mdriver's own font handling would make this return
+    /// false and silently skip the very tests meant to catch it.
+    fn has_text_font() -> bool {
+        use resvg::tiny_skia::Pixmap;
+        use resvg::usvg::{fontdb, Options, Tree};
+
+        let probe = concat!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80">"#,
+            r#"<text x="5" y="60" font-size="64" fill="black">HHH</text></svg>"#
+        );
+
+        let mut db = fontdb::Database::new();
+        db.load_system_fonts();
+
+        let mut families: Vec<String> = db
+            .faces()
+            .flat_map(|face| face.families.iter().map(|(name, _)| name.clone()))
+            .collect();
+        families.sort();
+        families.dedup();
+
+        families.iter().any(|family| {
+            let mut db = fontdb::Database::new();
+            db.load_system_fonts();
+            let opts = Options {
+                font_family: family.clone(),
+                fontdb: std::sync::Arc::new(db),
+                ..Options::default()
+            };
+            let Ok(tree) = Tree::from_str(probe, &opts) else {
+                return false;
+            };
+            let size = tree.size();
+            let Some(mut pixmap) = Pixmap::new(size.width() as u32, size.height() as u32) else {
+                return false;
+            };
+            resvg::render(
+                &tree,
+                resvg::tiny_skia::Transform::default(),
+                &mut pixmap.as_mut(),
+            );
+            let ink = pixmap
+                .pixels()
+                .iter()
+                .filter(|p| p.alpha() > 128 && p.red() < 120 && p.green() < 120 && p.blue() < 120)
+                .count();
+            ink > 50
+        })
+    }
+
     /// Regression test for the `foreignObject` bug: flowchart labels live inside
     /// `<foreignObject>` in Mermaid-parity SVG, which resvg silently skips. Rendering must
     /// go through merman's resvg-safe pipeline so labels become native SVG `<text>`.
     ///
-    /// Before the fix this diagram rasterized to 175 dark pixels (shape outlines only);
+    /// Before the fix this diagram rasterized to 114 dark pixels (shape outlines only);
     /// after it produces ~700, so 400 is a comfortable regression boundary.
     #[test]
     fn test_mermaid_flowchart_labels_are_rasterized() {
+        if !has_text_font() {
+            eprintln!("skipping: no Latin text font available to rasterize labels");
+            return;
+        }
         let mut p = kitty_parser();
         let output = feed_all(
             &mut p,
@@ -1761,17 +1824,22 @@ mod mermaid_rendering {
         assert!(
             dark > 400,
             "flowchart node/edge labels appear to be missing: only {} dark pixels \
-             (empty shapes render ~175, labeled shapes render ~700). \
-             Is try_render_mermaid using render_svg_sync instead of \
-             render_svg_resvg_safe_sync?",
+             (unlabeled shapes render ~114, labeled shapes render ~700). Either \
+             try_render_mermaid regressed to render_svg_sync (foreignObject labels \
+             resvg cannot draw), or render_svg stopped mapping the generic CSS font \
+             families onto fonts that exist on this system.",
             dark
         );
     }
 
     /// Same regression, for a diagram family whose class-member text is also HTML-labeled.
-    /// Before the fix: 237 dark pixels. After: ~760.
+    /// Before the fix: 117 dark pixels. After: ~760.
     #[test]
     fn test_mermaid_class_diagram_labels_are_rasterized() {
+        if !has_text_font() {
+            eprintln!("skipping: no Latin text font available to rasterize labels");
+            return;
+        }
         let mut p = kitty_parser();
         let output = feed_all(
             &mut p,
@@ -1783,7 +1851,7 @@ mod mermaid_rendering {
         assert!(
             dark > 450,
             "class diagram member text appears to be missing: only {} dark pixels \
-             (empty boxes render ~237, populated boxes render ~760)",
+             (empty boxes render ~117, populated boxes render ~760)",
             dark
         );
     }
