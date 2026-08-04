@@ -1617,7 +1617,7 @@ mod mermaid_rendering {
 
     #[test]
     fn test_mermaid_invalid_fallback_to_code() {
-        // mermaid-rs-renderer may render an error diagram rather than returning Err,
+        // merman may render an error diagram rather than returning Err,
         // so this test verifies that *something* is produced (image or code) without
         // panicking. The key contract is: no panic, always produce output.
         let mut p = kitty_parser();
