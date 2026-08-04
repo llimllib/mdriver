@@ -1244,11 +1244,8 @@ impl StreamingParser {
         // 2. Bare URL (no spaces, ends at whitespace or end of line)
         let (url, remaining) = if let Some(stripped) = url_part.strip_prefix('<') {
             // Angle-bracketed URL
-            if let Some(end) = stripped.find('>') {
-                (&stripped[..end], &stripped[end + 1..])
-            } else {
-                return None; // Unclosed angle bracket
-            }
+            let end = stripped.find('>')?;
+            (&stripped[..end], &stripped[end + 1..])
         } else {
             // Bare URL - take until whitespace
             let end = url_part.find(char::is_whitespace).unwrap_or(url_part.len());
@@ -1563,14 +1560,14 @@ impl StreamingParser {
         let (tx, rx) = std::sync::mpsc::channel();
         let source_clone = source.clone();
         std::thread::spawn(move || {
-            let result = mermaid_rs_renderer::render(&source_clone);
+            let result = merman::render::HeadlessRenderer::new().render_svg_sync(&source_clone);
             // Ignore send errors — receiver may have timed out and been dropped
             let _ = tx.send(result);
         });
 
         let svg_string = match rx.recv_timeout(MERMAID_RENDER_TIMEOUT) {
-            Ok(Ok(svg)) => svg,
-            _ => return None, // Timeout or render error
+            Ok(Ok(Some(svg))) => svg,
+            _ => return None, // Timeout, render error, or no diagram detected
         };
 
         let svg_bytes = svg_string.as_bytes();
