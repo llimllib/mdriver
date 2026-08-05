@@ -25,7 +25,7 @@ Pipe your llm output through it, or a markdown file from the web, and it will di
 
 - display images referenced in markdown in your terminal that supports the kitty protocol (kitty, ghostty, alacritty, and others)
 - syntax-highlight fenced code blocks for many languages using [syntect](https://github.com/trishume/syntect)
-- render [mermaid diagrams](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams) into images and display them in your terminal
+- render [mermaid diagrams](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams) into images and display them in your terminal, or as box-drawing text diagrams when image output isn't available
 - parse a subset of HTML and display it sensibly in the terminal
 - accept input from stdin, files, or URLs
 - Use [OSC8 hyperlinks](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda) to make links clickable

@@ -1490,9 +1490,13 @@ impl StreamingParser {
     }
 
     fn format_code_block(&self, lines: &[String], info: &str) -> String {
-        // Attempt to render mermaid diagrams as images when image protocol is enabled
-        if info.eq_ignore_ascii_case("mermaid") && self.image_protocol != ImageProtocol::None {
-            if let Some(rendered) = self.try_render_mermaid(lines) {
+        if info.eq_ignore_ascii_case("mermaid") {
+            if self.image_protocol != ImageProtocol::None {
+                if let Some(rendered) = self.try_render_mermaid(lines) {
+                    return rendered;
+                }
+            }
+            if let Some(rendered) = self.try_render_mermaid_ascii(lines) {
                 return rendered;
             }
             // Fall through to normal code block rendering on failure
@@ -1582,6 +1586,32 @@ impl StreamingParser {
             Ok(kitty_output) => Some(format!("{}\n", kitty_output)),
             Err(_) => None,
         }
+    }
+
+    /// Try to render a mermaid diagram as a box-drawing text diagram.
+    /// Returns `None` when the diagram family has no ASCII renderer, rendering fails,
+    /// or the result is too wide for the output width (where terminal wrapping would
+    /// garble the drawing).
+    fn try_render_mermaid_ascii(&self, lines: &[String]) -> Option<String> {
+        let source = lines.join("\n");
+
+        let diagram = merman::ascii::HeadlessAsciiRenderer::new()
+            .with_charset(merman::ascii::AsciiCharset::Unicode)
+            .render_ascii_sync(&source)
+            .ok()??;
+
+        let diagram = diagram.trim_end_matches('\n');
+        if diagram.is_empty() {
+            return None;
+        }
+        if diagram
+            .lines()
+            .any(|line| self.display_width(line) > self.width)
+        {
+            return None;
+        }
+
+        Some(format!("{}\n\n", diagram))
     }
 
     /// Parse a task list item marker at the start of content.

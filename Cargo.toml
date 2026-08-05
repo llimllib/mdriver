@@ -25,7 +25,7 @@ term_size = "0.3.2"
 resvg = { version = "0.48.1", default-features = false, features = ["text", "system-fonts", "raster-images"] }
 unicode-width = "0.2.2"
 htmlentity = "1.3.2"
-merman = { version = "0.8.0-alpha.3", default-features = false, features = ["render"] }
+merman = { version = "0.8.0-alpha.3", default-features = false, features = ["render", "ascii"] }
 # Pulled in directly only to enable label/URL sanitization, which strips external
 # resource references (e.g. file:// image hrefs) before the SVG reaches resvg.
 merman-core = { version = "0.8.0-alpha.3", default-features = false, features = ["full-sanitization"] }
