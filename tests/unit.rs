@@ -1589,19 +1589,50 @@ mod mermaid_rendering {
     }
 
     #[test]
-    fn test_mermaid_renders_as_code_without_images() {
+    fn test_mermaid_renders_as_ascii_without_images() {
         let mut p = plain_parser();
         let output = feed_all(&mut p, "```mermaid\nflowchart LR\n    A-->B-->C\n```\n");
-        // Should NOT contain kitty protocol
         assert!(
             !output.contains("\x1b_G"),
             "should not contain kitty graphics protocol"
         );
-        // Should contain the mermaid source as code
+        let stripped = super::strip_ansi(&output);
+        assert!(
+            !stripped.contains("flowchart LR"),
+            "should render a diagram, not the source, got: {:?}",
+            stripped
+        );
+        assert!(
+            stripped.contains('│') && stripped.contains('A'),
+            "should draw a box-drawing diagram, got: {:?}",
+            stripped
+        );
+    }
+
+    #[test]
+    fn test_mermaid_ascii_unsupported_falls_back_to_code() {
+        let mut p = plain_parser();
+        let output = feed_all(&mut p, "```mermaid\nnotADiagramType\n  a b c\n```\n");
+        let stripped = super::strip_ansi(&output);
+        assert!(
+            stripped.contains("notADiagramType"),
+            "fallback should show mermaid source as code, got: {:?}",
+            stripped
+        );
+    }
+
+    #[test]
+    fn test_mermaid_ascii_too_wide_falls_back_to_code() {
+        let mut p = StreamingParser::with_width("base16-ocean.dark", ImageProtocol::None, 20);
+        let output = feed_all(
+            &mut p,
+            "```mermaid\nflowchart LR\n    Alpha-->Beta-->Gamma-->Delta\n```\n",
+        );
         let stripped = super::strip_ansi(&output);
         assert!(
             stripped.contains("flowchart LR"),
-            "should show mermaid source as code"
+            "diagram wider than the output width should fall back to code, got: {:?}",
+            stripped
         );
     }
 
