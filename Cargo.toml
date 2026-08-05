@@ -16,6 +16,9 @@ name = "mdriver"
 path = "src/main.rs"
 
 [dependencies]
+# Installs a logger for the `log` diagnostics emitted by usvg/resvg/fontdb/ureq,
+# which are otherwise discarded. See src/logging.rs.
+log = "0.4.33"
 two-face = "0.5.1"
 syntect = { version = "5.3.0", default-features = false, features = ["default-syntaxes", "default-themes", "regex-fancy", "parsing", "html", "dump-load", "dump-create"] }
 ureq = "3.3.0"
