@@ -2,6 +2,7 @@ use mdriver::StreamingParser;
 use std::env;
 use std::fs::File;
 use std::io::{self, ErrorKind, IsTerminal, Read, Write};
+use std::path::Path;
 
 fn print_version() {
     println!("mdriver {}", env!("CARGO_PKG_VERSION"));
@@ -23,6 +24,8 @@ fn print_help() {
     println!("    --width <N>         Set output width for line wrapping (default: min(terminal width, 80))");
     println!("    --padding <N>       Add N spaces of left padding to output (default: 0)");
     println!("    --color <WHEN>      When to use colors: auto, always, never (default: auto)");
+    println!("    --verbose, -v       Print rendering diagnostics (warnings) to stderr");
+    println!("    --debug-log <FILE>  Write detailed diagnostics to FILE (overwrites it)");
     println!();
     println!("ARGS:");
     println!(
@@ -41,6 +44,8 @@ fn print_help() {
     println!("    mdriver --images kitty document.md");
     println!("    mdriver --width 100 document.md");
     println!("    mdriver --color=always README.md | less -R");
+    println!("    mdriver --verbose --images kitty diagram.md");
+    println!("    mdriver --debug-log /tmp/mdriver.log --images kitty diagram.md");
     println!("    cat file.md | mdriver");
     println!("    MDRIVER_THEME=\"InspiredGitHub\" mdriver file.md");
 }
@@ -91,6 +96,8 @@ fn run() -> io::Result<()> {
     let mut padding: Option<usize> = None;
     let mut image_protocol = mdriver::ImageProtocol::None;
     let mut color_mode = ColorMode::Auto;
+    let mut verbose = false;
+    let mut debug_log: Option<String> = None;
     let mut file_path: Option<String> = None;
     let mut i = 1;
 
@@ -219,6 +226,20 @@ fn run() -> io::Result<()> {
                     std::process::exit(1);
                 }
             }
+            "--verbose" | "-v" => {
+                verbose = true;
+                i += 1;
+            }
+            "--debug-log" => {
+                if i + 1 < args.len() {
+                    debug_log = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    eprintln!("Error: --debug-log requires a file path");
+                    eprintln!("Run 'mdriver --help' for usage information");
+                    std::process::exit(1);
+                }
+            }
             arg if !arg.starts_with('-') => {
                 file_path = Some(arg.to_string());
                 i += 1;
@@ -229,6 +250,15 @@ fn run() -> io::Result<()> {
                 std::process::exit(1);
             }
         }
+    }
+
+    // Install the logger before any rendering so diagnostics from resvg/usvg and
+    // our own fallbacks are captured. Failing to open an explicitly requested log
+    // file is an error worth reporting rather than silently ignoring.
+    if let Err(e) = mdriver::logging::init(verbose, debug_log.as_ref().map(Path::new)) {
+        let path = debug_log.unwrap_or_default();
+        eprintln!("Error: could not open debug log '{}': {}", path, e);
+        std::process::exit(1);
     }
 
     // Determine if we should use color/formatting

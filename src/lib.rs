@@ -3,11 +3,14 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use htmlentity::entity::{decode as decode_html_entity_bytes, ICodedDataTrait};
+use log::{debug, warn};
 use syntect::easy::HighlightLines;
 use syntect::parsing::SyntaxSet;
 use syntect::util::as_24_bit_terminal_escaped;
 use two_face::theme::{EmbeddedLazyThemeSet, EmbeddedThemeName};
 use unicode_width::UnicodeWidthStr;
+
+pub mod logging;
 
 // Static theme set using two-face's extended themes
 static THEME_SET: LazyLock<EmbeddedLazyThemeSet> = LazyLock::new(two_face::theme::extra);
@@ -296,8 +299,15 @@ impl StreamingParser {
 
         // Collect results
         for (url, result) in rx {
-            if let Ok(data) = result {
-                self.image_cache.insert(url, data);
+            match result {
+                Ok(data) => {
+                    self.image_cache.insert(url, data);
+                }
+                // Not fatal: load_image_data retries this URL on demand, and
+                // render_image falls back to alt text. Worth a line either way,
+                // since a prefetch failure usually means every later attempt
+                // fails too.
+                Err(e) => warn!("image: prefetch of {url} failed: {e}"),
             }
         }
     }
@@ -1525,9 +1535,15 @@ impl StreamingParser {
         for line in lines {
             // Add newline for proper syntax highlighting state management
             let line_with_newline = format!("{}\n", line);
-            let ranges = highlighter
-                .highlight_line(&line_with_newline, &self.syntax_set)
-                .unwrap_or_default();
+            let ranges = match highlighter.highlight_line(&line_with_newline, &self.syntax_set) {
+                Ok(ranges) => ranges,
+                Err(e) => {
+                    // Losing highlighting on one line is survivable, but the line
+                    // then renders unstyled with no indication why.
+                    warn!("highlight: {language}: {e}; line rendered without highlighting");
+                    Vec::new()
+                }
+            };
             let highlighted = as_24_bit_terminal_escaped(&ranges[..], false);
             // Remove the trailing newline from highlighted output
             let highlighted = highlighted.trim_end_matches('\n').to_string();
@@ -1572,7 +1588,28 @@ impl StreamingParser {
 
         let svg_string = match rx.recv_timeout(MERMAID_RENDER_TIMEOUT) {
             Ok(Ok(Some(svg))) => svg,
-            _ => return None, // Timeout, render error, or no diagram detected
+            // Each of these degrades to a plain code block, which looks deliberate.
+            // Say which one it was, or the user has no way to tell a syntax error
+            // from a slow diagram.
+            Ok(Ok(None)) => {
+                debug!("mermaid: no diagram detected in fenced block; rendering as code");
+                return None;
+            }
+            Ok(Err(e)) => {
+                warn!("mermaid: render failed: {e}; rendering as code block");
+                return None;
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                warn!(
+                    "mermaid: render exceeded {:?} timeout; rendering as code block",
+                    MERMAID_RENDER_TIMEOUT
+                );
+                return None;
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                warn!("mermaid: render thread died; rendering as code block");
+                return None;
+            }
         };
 
         let svg_bytes = svg_string.as_bytes();
@@ -1580,7 +1617,10 @@ impl StreamingParser {
         // Use the existing SVG→raster→kitty pipeline
         match self.process_image(svg_bytes) {
             Ok(kitty_output) => Some(format!("{}\n", kitty_output)),
-            Err(_) => None,
+            Err(e) => {
+                warn!("mermaid: rasterizing rendered SVG failed: {e}; rendering as code block");
+                None
+            }
         }
     }
 
@@ -2538,10 +2578,16 @@ impl StreamingParser {
                         // Process and render
                         match self.process_image(&data) {
                             Ok(kitty_output) => kitty_output,
-                            Err(_) => alt.to_string(), // Fallback to alt text
+                            Err(e) => {
+                                warn!("image: decoding {src} failed: {e}; showing alt text");
+                                alt.to_string()
+                            }
                         }
                     }
-                    Err(_) => alt.to_string(), // Fallback to alt text
+                    Err(e) => {
+                        warn!("image: loading {src} failed: {e}; showing alt text");
+                        alt.to_string()
+                    }
                 }
             }
         }
@@ -2747,13 +2793,17 @@ impl StreamingParser {
 
         let mut fontdb = fontdb::Database::new();
         if let Some(path) = &emoji_path {
-            let _ = fontdb.load_font_file(path);
+            if let Err(e) = fontdb.load_font_file(path) {
+                warn!("svg: loading emoji font {}: {e}", path.display());
+            }
         } else {
+            // Once per process, not once per diagram: a document with many
+            // diagrams would otherwise repeat this for each one.
             use std::sync::atomic::{AtomicBool, Ordering};
             static WARNED: AtomicBool = AtomicBool::new(false);
             if !WARNED.swap(true, Ordering::Relaxed) {
-                eprintln!(
-                    "mdriver: warning: no emoji font found; \
+                warn!(
+                    "svg: no emoji font found; \
                      emoji in SVG/Mermaid diagrams may render incorrectly"
                 );
             }

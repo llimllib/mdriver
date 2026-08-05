@@ -100,8 +100,47 @@ mdriver --images kitty document.md
 # Control color output (auto, always, never)
 mdriver --color=always README.md | less -R
 
+# Report rendering problems (missing fonts, skipped SVG content) to stderr
+mdriver --verbose --images kitty diagram.md
+
+# Capture full diagnostics to a file for a bug report
+mdriver --debug-log /tmp/mdriver.log --images kitty diagram.md
+
 # Show help
 mdriver --help
+```
+
+## Diagnostics
+
+By default mdriver is silent: when it cannot render something it falls back
+quietly, showing alt text for a broken image or a syntax-highlighted code block
+for a Mermaid diagram it could not draw.
+
+That is the right default for everyday use, but it makes some failures hard to
+diagnose. The worst case is a diagram that renders as a *plausible* image with
+content missing — for example shapes drawn with every label dropped because no
+font matched. Two flags turn on reporting:
+
+```bash
+# Warnings to stderr
+mdriver --verbose --images kitty diagram.md
+
+# Everything to a file, including HTTP and TLS activity
+mdriver --debug-log /tmp/mdriver.log --images kitty diagram.md
+```
+
+`--verbose` (or `-v`) reports warnings from mdriver and from the SVG renderer it
+uses, such as skipped SVG elements, unresolvable fonts, and image or Mermaid
+fallbacks. `--debug-log <FILE>` writes every message, timestamped and truncating
+the file each run; it is more detail than is usually useful, but it is what you
+want attached to a bug report. Both can be used together.
+
+Diagnostics only ever go to stderr or the log file, never to stdout, so neither
+flag changes rendered output. Piping and redirection are unaffected:
+
+```bash
+mdriver --verbose --color=always README.md > out.txt   # warnings still on terminal
+mdriver --verbose --color=always README.md 2>/dev/null # warnings discarded
 ```
 
 ## Syntax Highlighting Themes

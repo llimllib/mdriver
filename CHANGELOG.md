@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- feat: add `--verbose` and `--debug-log` diagnostics; install a `log` implementation so resvg/usvg warnings are no longer discarded (#78)
+
 ## [0.9.0] - 2026-01-15
 
 - feat: auto-populate changelog and add shellcheck CI (#19)
