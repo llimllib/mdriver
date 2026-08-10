@@ -1635,19 +1635,39 @@ impl StreamingParser {
     fn try_render_mermaid_ascii(&self, lines: &[String]) -> Option<String> {
         let source = lines.join("\n");
 
-        let diagram = merman::ascii::HeadlessAsciiRenderer::new()
+        // Every failure here degrades to a plain code block, which looks deliberate.
+        // Say which failure it was, or the user has no way to tell an unsupported
+        // diagram feature from a syntax error or a too-wide drawing.
+        let diagram = match merman::ascii::HeadlessAsciiRenderer::new()
             .with_charset(merman::ascii::AsciiCharset::Unicode)
             .render_ascii_sync(&source)
-            .ok()??;
+        {
+            Ok(Some(diagram)) => diagram,
+            Ok(None) => {
+                debug!("mermaid: no diagram detected in fenced block; rendering as code");
+                return None;
+            }
+            Err(e) => {
+                warn!("mermaid: ascii render failed: {e}; rendering as code block");
+                return None;
+            }
+        };
 
         let diagram = diagram.trim_end_matches('\n');
         if diagram.is_empty() {
+            warn!("mermaid: ascii render produced no output; rendering as code block");
             return None;
         }
-        if diagram
+        if let Some(width) = diagram
             .lines()
-            .any(|line| self.display_width(line) > self.width)
+            .map(|line| self.display_width(line))
+            .filter(|w| *w > self.width)
+            .max()
         {
+            warn!(
+                "mermaid: ascii diagram is {} columns wide, output width is {}; rendering as code block",
+                width, self.width
+            );
             return None;
         }
 
