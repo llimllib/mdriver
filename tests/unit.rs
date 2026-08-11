@@ -1897,10 +1897,11 @@ mod mermaid_rendering {
             "stateDiagram-v2\n    [*] --> Still\n    Still --> Moving\n",
             "erDiagram\n    CUSTOMER ||--o{ ORDER : places\n",
         ] {
-            let svg = merman::render::HeadlessRenderer::new()
-                .render_svg_resvg_safe_sync(source)
+            let rendered = merman::svg::HeadlessRenderer::new()
+                .render_resvg_compatible_svg_sync(source)
                 .expect("render should succeed")
                 .expect("diagram type should be detected");
+            let svg = rendered.as_str();
             assert!(
                 !svg.contains("foreignObject"),
                 "resvg-safe SVG still contains foreignObject for source: {:?}",
