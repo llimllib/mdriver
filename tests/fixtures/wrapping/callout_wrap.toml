@@ -1,0 +1,7 @@
+name = "callout-wrapping"
+description = "Callout wrapping must measure the colored bar prefix by visible width, not raw ANSI length"
+width = 40
+
+[[chunks]]
+input = "> [!NOTE]\n> This is a note with enough text to wrap onto lines\n\n"
+emit = "\u001b[34m │ \u001b[0m\u001b[1m\u001b[34m ℹ\u001b[0m\n\u001b[34m │ \u001b[0m\u001b[1m\u001b[34mNote\u001b[0m\n\u001b[34m │ \u001b[0mThis is a note with enough text to\n\u001b[34m │ \u001b[0mwrap onto lines\n\n"

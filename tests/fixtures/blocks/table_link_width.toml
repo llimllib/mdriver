@@ -1,0 +1,25 @@
+name = "table-link-width"
+description = "Column widths are measured on rendered link text, not the markdown source URL"
+
+[[chunks]]
+input = "| Ticket | Note |\n"
+emit = ""
+
+[[chunks]]
+input = "| ------ | ---- |\n"
+emit = ""
+
+[[chunks]]
+input = "| [ENG-396](https://linear.app/jellyfishco/issue/ENG-396) | ok |\n"
+emit = ""
+
+[[chunks]]
+input = "\n"
+emit = """
+┌─────────┬──────┐
+│ Ticket  │ Note │
+├─────────┼──────┤
+│ \u001b]8;;https://linear.app/jellyfishco/issue/ENG-396\u001b\\\u001b[34;4mENG-396\u001b[0m\u001b]8;;\u001b\\ │ ok   │
+└─────────┴──────┘
+
+"""

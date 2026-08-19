@@ -1964,8 +1964,10 @@ impl StreamingParser {
     /// `first_indent` is prepended to the first line, `cont_indent` to continuation lines.
     /// Long words that exceed width are kept whole on their own line.
     pub fn wrap_text(&self, text: &str, first_indent: &str, cont_indent: &str) -> String {
-        let first_indent_width = first_indent.width();
-        let cont_indent_width = cont_indent.width();
+        // Indents may contain ANSI codes (e.g. the colored bar of a callout), so
+        // measure their *visible* width rather than the raw string width.
+        let first_indent_width = self.display_width(first_indent);
+        let cont_indent_width = self.display_width(cont_indent);
 
         // Split text into "tokens" preserving ANSI codes with adjacent words
         // We need to split on whitespace while preserving the ANSI codes
@@ -2196,16 +2198,26 @@ impl StreamingParser {
 
         let mut col_widths = vec![0; num_cols];
 
-        // Measure header (with inline formatting stripped, using Unicode width)
-        for (i, cell) in header.iter().enumerate() {
-            col_widths[i] = self.strip_ansi(cell).width();
+        // Render inline markdown once up front. Widths must be measured on the
+        // *rendered* cell, not the markdown source: a link like
+        // `[ENG-396](https://very/long/url)` renders to just `ENG-396`, so
+        // measuring the source would make the column far too wide.
+        let formatted_header: Vec<String> = header.iter().map(|c| self.format_inline(c)).collect();
+        let formatted_rows: Vec<Vec<String>> = rows
+            .iter()
+            .map(|row| row.iter().map(|c| self.format_inline(c)).collect())
+            .collect();
+
+        // Measure header (using rendered display width)
+        for (i, cell) in formatted_header.iter().enumerate() {
+            col_widths[i] = self.display_width(cell);
         }
 
         // Measure all data rows
-        for row in rows {
+        for row in &formatted_rows {
             for (i, cell) in row.iter().enumerate() {
                 if i < num_cols {
-                    let width = self.strip_ansi(cell).width();
+                    let width = self.display_width(cell);
                     col_widths[i] = col_widths[i].max(width);
                 }
             }
@@ -2228,10 +2240,9 @@ impl StreamingParser {
 
         // Render header row: │ Header │ Header │
         output.push('│');
-        for (i, cell) in header.iter().enumerate() {
-            let formatted = self.format_inline(cell);
+        for (i, formatted) in formatted_header.iter().enumerate() {
             let aligned = self.align_cell(
-                &formatted,
+                formatted,
                 col_widths[i],
                 alignments.get(i).copied().unwrap_or(Alignment::Left),
             );
@@ -2250,13 +2261,12 @@ impl StreamingParser {
         output.push_str("┤\n");
 
         // Render data rows
-        for row in rows {
+        for row in &formatted_rows {
             output.push('│');
             for (i, &width) in col_widths.iter().enumerate().take(num_cols) {
-                let cell = row.get(i).map(|s| s.as_str()).unwrap_or("");
-                let formatted = self.format_inline(cell);
+                let formatted = row.get(i).map(|s| s.as_str()).unwrap_or("");
                 let aligned = self.align_cell(
-                    &formatted,
+                    formatted,
                     width,
                     alignments.get(i).copied().unwrap_or(Alignment::Left),
                 );
