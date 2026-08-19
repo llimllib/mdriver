@@ -65,20 +65,42 @@ Only use `#[allow(...)]` when:
 
 ## Pull Request Workflow
 
-Use the `gh` CLI tool for creating pull requests. When creating a PR:
+Use the `gh` CLI tool for creating pull requests.
 
-1. **Export the session transcript** using `/export`
-2. **Create a gist** with the transcript: `gh gist create <export_path>/conversation_full.md --public`
-3. **Create the PR** with `gh pr create`, including a link to the transcript gist
+Transcripts are **committed to the repo** under `transcripts/`, not published as
+gists. Use the `pr-transcript` skill, which exports the current session to HTML:
 
-PRs should include a "Session transcript" section with a link to the gist, e.g.:
+```bash
+~/.local/skills/pr-transcript/export-transcript.sh <pr-number> <description>
+# writes transcripts/<pr-number>-<kebab-description>.html
+```
+
+The filename needs the PR number before the PR exists, so work out the next one:
+
+```bash
+gh pr list --state all --limit 1 --json number -q '.[0].number'   # add 1
+```
+
+Commit the transcript alongside the code changes, then open the PR. The body
+should include a "Session transcript" section pointing at the committed file:
 
 ```markdown
 ## Session transcript
-[Claude Code session transcript](https://gist.github.com/llimllib/...)
+[Session transcript](transcripts/83-fix-table-and-wrap-widths.html)
 ```
 
 This provides transparency and context for reviewers about how the changes were developed.
+
+### Commit signing
+
+This repo sets `commit.gpgsign=true` with an SSH key at `~/.ssh/id_ed25519.pub`.
+Sandboxed agents often cannot read `~/.ssh` (`Operation not permitted`), which
+makes `git commit` fail outright. When that happens, commit with `--no-gpg-sign`
+and note it in the PR body so it can be re-signed:
+
+```bash
+git commit --amend -S --no-edit && git push --force-with-lease
+```
 
 ## Test-Driven Development Approach
 
