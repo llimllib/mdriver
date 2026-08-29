@@ -1,3 +1,4 @@
+use log::warn;
 use mdriver::StreamingParser;
 use std::env;
 use std::fs::File;
@@ -259,6 +260,17 @@ fn run() -> io::Result<()> {
         let path = debug_log.unwrap_or_default();
         eprintln!("Error: could not open debug log '{}': {}", path, e);
         std::process::exit(1);
+    }
+
+    // Multiplexers mangle graphics escapes rather than forwarding them, so an image
+    // would land on the screen as garbage. Drop it and render alt text instead.
+    if image_protocol != mdriver::ImageProtocol::None {
+        let in_tmux = env::var_os("TMUX").is_some();
+        let term = env::var("TERM").ok();
+        if let Some(reason) = mdriver::image_disable_reason(term.as_deref(), in_tmux) {
+            warn!("images: disabled because {reason}");
+            image_protocol = mdriver::ImageProtocol::None;
+        }
     }
 
     // Determine if we should use color/formatting

@@ -1935,3 +1935,30 @@ mod mermaid_rendering {
         }
     }
 }
+
+mod image_gating {
+    use mdriver::image_disable_reason;
+
+    #[test]
+    fn allows_images_on_a_plain_terminal() {
+        assert_eq!(image_disable_reason(Some("xterm-kitty"), false), None);
+    }
+
+    #[test]
+    fn blocks_images_under_tmux() {
+        // Both signals stand alone: TERM is often left as the outer terminal's
+        // value, and $TMUX is not inherited by every child process.
+        assert!(image_disable_reason(Some("xterm-kitty"), true).is_some());
+        assert!(image_disable_reason(Some("tmux-256color"), false).is_some());
+    }
+
+    #[test]
+    fn blocks_images_under_screen() {
+        assert!(image_disable_reason(Some("screen.xterm-256color"), false).is_some());
+    }
+
+    #[test]
+    fn tolerates_unset_term() {
+        assert_eq!(image_disable_reason(None, false), None);
+    }
+}
