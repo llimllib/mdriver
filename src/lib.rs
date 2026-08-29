@@ -2932,8 +2932,10 @@ impl StreamingParser {
             if i == 0 {
                 // First chunk: include format, transmission parameters, and display width
                 // c=columns tells kitty the width; it calculates rows to maintain aspect ratio
+                // q=2 suppresses kitty's OK/error replies, which would otherwise be written
+                // to the tty input buffer and echoed by the shell after we exit
                 output.push_str(&format!(
-                    "\x1b_Gf=100,a=T,c={},m={};{}\x1b\\",
+                    "\x1b_Gf=100,a=T,q=2,c={},m={};{}\x1b\\",
                     columns, m, chunk
                 ));
             } else {

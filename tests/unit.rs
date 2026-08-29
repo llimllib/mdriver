@@ -1589,6 +1589,26 @@ mod mermaid_rendering {
     }
 
     #[test]
+    fn test_kitty_transmission_sets_quiet_mode() {
+        let mut p = kitty_parser();
+        let output = feed_all(&mut p, "```mermaid\nflowchart LR\n    A-->B-->C\n```\n");
+        let start = output.find("\x1b_G").expect("should emit a kitty sequence");
+        let after = &output[start + 3..];
+        let semi = after
+            .find(';')
+            .expect("control block should be ;-terminated");
+        let controls = &after[..semi];
+        // We send no image id, so a successful transmission draws no acknowledgement
+        // either way. q=2 is about the failure response, which would otherwise be
+        // written to a tty nobody is reading.
+        assert!(
+            controls.split(',').any(|c| c == "q=2"),
+            "first kitty control block should set q=2, got: {:?}",
+            controls
+        );
+    }
+
+    #[test]
     fn test_mermaid_renders_as_ascii_without_images() {
         let mut p = plain_parser();
         let output = feed_all(&mut p, "```mermaid\nflowchart LR\n    A-->B-->C\n```\n");
