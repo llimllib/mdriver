@@ -1,3 +1,4 @@
+use log::warn;
 use mdriver::StreamingParser;
 use std::env;
 use std::fs::File;
@@ -36,6 +37,7 @@ fn print_help() {
     println!("    MDRIVER_THEME       Default syntax highlighting theme (overridden by --theme)");
     println!("    MDRIVER_WIDTH       Default output width (overridden by --width)");
     println!("    MDRIVER_PADDING     Default left padding (overridden by --padding)");
+    println!("    MDRIVER_FORCE_IMAGES Set to 1 to emit images where they look unsupported");
     println!();
     println!("EXAMPLES:");
     println!("    mdriver README.md");
@@ -259,6 +261,21 @@ fn run() -> io::Result<()> {
         let path = debug_log.unwrap_or_default();
         eprintln!("Error: could not open debug log '{}': {}", path, e);
         std::process::exit(1);
+    }
+
+    // Images are unconditionally destructive where they aren't supported: the escapes
+    // either scribble on the screen or get written into whatever file we're redirected
+    // to. Drop them rather than emitting them and hoping.
+    let force_images = env::var("MDRIVER_FORCE_IMAGES").is_ok_and(|v| v == "1");
+    if image_protocol != mdriver::ImageProtocol::None && !force_images {
+        let in_tmux = env::var_os("TMUX").is_some();
+        let term = env::var("TERM").ok();
+        if let Some(reason) =
+            mdriver::image_disable_reason(io::stdout().is_terminal(), term.as_deref(), in_tmux)
+        {
+            warn!("images: disabled because {reason}; set MDRIVER_FORCE_IMAGES=1 to override");
+            image_protocol = mdriver::ImageProtocol::None;
+        }
     }
 
     // Determine if we should use color/formatting

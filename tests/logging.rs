@@ -23,8 +23,15 @@ fn write_file(path: &Path, contents: &str) {
     fs::write(path, contents).expect("write temp file");
 }
 
+/// Image rendering is suppressed when stdout is not a terminal, which it never
+/// is in a subprocess. These tests exercise image diagnostics, so they opt back
+/// in explicitly.
 fn run(args: &[&str]) -> Output {
-    Command::new(EXE).args(args).output().expect("run mdriver")
+    Command::new(EXE)
+        .args(args)
+        .env("MDRIVER_FORCE_IMAGES", "1")
+        .output()
+        .expect("run mdriver")
 }
 
 /// An SVG that makes usvg emit a warning: the embedded image is not a valid

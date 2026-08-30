@@ -63,6 +63,34 @@ pub enum ImageProtocol {
     Kitty,
 }
 
+/// Why inline image escapes must not be emitted in this environment, if they must not.
+///
+/// Graphics protocols talk to a terminal emulator directly, so they are only safe when
+/// we are writing to one. Multiplexers are their own hazard: they interpret the stream
+/// themselves and mangle graphics sequences rather than passing them through, so an
+/// image lands on the screen as garbage.
+///
+/// Takes its inputs rather than reading the environment, so tests can cover every case
+/// without allocating a pty.
+pub fn image_disable_reason(
+    stdout_is_terminal: bool,
+    term: Option<&str>,
+    in_tmux: bool,
+) -> Option<&'static str> {
+    let term = term.unwrap_or_default();
+
+    if in_tmux || term.starts_with("tmux") {
+        return Some("tmux does not pass kitty graphics escapes through to the terminal");
+    }
+    if term.starts_with("screen") {
+        return Some("screen does not support kitty graphics escapes");
+    }
+    if !stdout_is_terminal {
+        return Some("stdout is not a terminal");
+    }
+    None
+}
+
 /// Image data parsed from markdown
 #[derive(Debug)]
 struct ImageData {
@@ -2932,8 +2960,10 @@ impl StreamingParser {
             if i == 0 {
                 // First chunk: include format, transmission parameters, and display width
                 // c=columns tells kitty the width; it calculates rows to maintain aspect ratio
+                // q=2 suppresses kitty's OK/error replies, which would otherwise be written
+                // to the tty input buffer and echoed by the shell after we exit
                 output.push_str(&format!(
-                    "\x1b_Gf=100,a=T,c={},m={};{}\x1b\\",
+                    "\x1b_Gf=100,a=T,q=2,c={},m={};{}\x1b\\",
                     columns, m, chunk
                 ));
             } else {

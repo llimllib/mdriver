@@ -1589,6 +1589,26 @@ mod mermaid_rendering {
     }
 
     #[test]
+    fn test_kitty_transmission_sets_quiet_mode() {
+        let mut p = kitty_parser();
+        let output = feed_all(&mut p, "```mermaid\nflowchart LR\n    A-->B-->C\n```\n");
+        let start = output.find("\x1b_G").expect("should emit a kitty sequence");
+        let after = &output[start + 3..];
+        let semi = after
+            .find(';')
+            .expect("control block should be ;-terminated");
+        let controls = &after[..semi];
+        // We send no image id, so a successful transmission draws no acknowledgement
+        // either way. q=2 is about the failure response, which would otherwise be
+        // written to a tty nobody is reading.
+        assert!(
+            controls.split(',').any(|c| c == "q=2"),
+            "first kitty control block should set q=2, got: {:?}",
+            controls
+        );
+    }
+
+    #[test]
     fn test_mermaid_renders_as_ascii_without_images() {
         let mut p = plain_parser();
         let output = feed_all(&mut p, "```mermaid\nflowchart LR\n    A-->B-->C\n```\n");
@@ -1913,5 +1933,42 @@ mod mermaid_rendering {
                 source
             );
         }
+    }
+}
+
+mod image_gating {
+    use mdriver::image_disable_reason;
+
+    #[test]
+    fn allows_images_on_a_plain_terminal() {
+        assert_eq!(image_disable_reason(true, Some("xterm-kitty"), false), None);
+    }
+
+    #[test]
+    fn blocks_images_when_stdout_is_redirected() {
+        let reason = image_disable_reason(false, Some("xterm-kitty"), false);
+        assert_eq!(reason, Some("stdout is not a terminal"));
+    }
+
+    #[test]
+    fn blocks_images_under_tmux() {
+        // Both signals stand alone: TERM is often left as the outer terminal's
+        // value, and $TMUX is not inherited by every child process.
+        assert!(image_disable_reason(true, Some("xterm-kitty"), true).is_some());
+        assert!(image_disable_reason(true, Some("tmux-256color"), false).is_some());
+    }
+
+    #[test]
+    fn blocks_images_under_screen() {
+        assert!(image_disable_reason(true, Some("screen.xterm-256color"), false).is_some());
+    }
+
+    #[test]
+    fn tolerates_unset_term() {
+        assert_eq!(image_disable_reason(true, None, false), None);
+        assert_eq!(
+            image_disable_reason(false, None, false),
+            Some("stdout is not a terminal")
+        );
     }
 }
