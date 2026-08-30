@@ -207,6 +207,15 @@ mdriver --theme "InspiredGitHub" --images kitty README.md
 - **Backward compatible**: Without `--images` flag, images render as plain text `![alt](src)`
 - **Extensible**: Architecture supports future protocols (sixel, iTerm2, etc.)
 
+### When images are suppressed
+
+Graphics escapes are only meaningful when mdriver is writing straight to a terminal that understands them, so `--images` is ignored when:
+
+- stdout is a pipe or a file, where the escapes would otherwise be written into your output
+- running under tmux or screen, which mangle graphics sequences rather than forwarding them
+
+Run with `--verbose` to see why images were dropped. If the detection is wrong for your setup, set `MDRIVER_FORCE_IMAGES=1` to emit them anyway.
+
 ## Color Output Control
 
 By default, mdriver automatically detects whether to use ANSI colors based on whether stdout is a terminal. You can override this behavior with the `--color` flag.

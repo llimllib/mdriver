@@ -1941,24 +1941,34 @@ mod image_gating {
 
     #[test]
     fn allows_images_on_a_plain_terminal() {
-        assert_eq!(image_disable_reason(Some("xterm-kitty"), false), None);
+        assert_eq!(image_disable_reason(true, Some("xterm-kitty"), false), None);
+    }
+
+    #[test]
+    fn blocks_images_when_stdout_is_redirected() {
+        let reason = image_disable_reason(false, Some("xterm-kitty"), false);
+        assert_eq!(reason, Some("stdout is not a terminal"));
     }
 
     #[test]
     fn blocks_images_under_tmux() {
         // Both signals stand alone: TERM is often left as the outer terminal's
         // value, and $TMUX is not inherited by every child process.
-        assert!(image_disable_reason(Some("xterm-kitty"), true).is_some());
-        assert!(image_disable_reason(Some("tmux-256color"), false).is_some());
+        assert!(image_disable_reason(true, Some("xterm-kitty"), true).is_some());
+        assert!(image_disable_reason(true, Some("tmux-256color"), false).is_some());
     }
 
     #[test]
     fn blocks_images_under_screen() {
-        assert!(image_disable_reason(Some("screen.xterm-256color"), false).is_some());
+        assert!(image_disable_reason(true, Some("screen.xterm-256color"), false).is_some());
     }
 
     #[test]
     fn tolerates_unset_term() {
-        assert_eq!(image_disable_reason(None, false), None);
+        assert_eq!(image_disable_reason(true, None, false), None);
+        assert_eq!(
+            image_disable_reason(false, None, false),
+            Some("stdout is not a terminal")
+        );
     }
 }

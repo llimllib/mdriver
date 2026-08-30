@@ -65,13 +65,18 @@ pub enum ImageProtocol {
 
 /// Why inline image escapes must not be emitted in this environment, if they must not.
 ///
-/// Terminal multiplexers interpret the stream themselves and mangle graphics
-/// sequences rather than passing them through, so an image lands on the screen as
-/// garbage.
+/// Graphics protocols talk to a terminal emulator directly, so they are only safe when
+/// we are writing to one. Multiplexers are their own hazard: they interpret the stream
+/// themselves and mangle graphics sequences rather than passing them through, so an
+/// image lands on the screen as garbage.
 ///
-/// Takes its inputs rather than reading the environment, so tests can cover every
-/// case without manipulating process-wide state.
-pub fn image_disable_reason(term: Option<&str>, in_tmux: bool) -> Option<&'static str> {
+/// Takes its inputs rather than reading the environment, so tests can cover every case
+/// without allocating a pty.
+pub fn image_disable_reason(
+    stdout_is_terminal: bool,
+    term: Option<&str>,
+    in_tmux: bool,
+) -> Option<&'static str> {
     let term = term.unwrap_or_default();
 
     if in_tmux || term.starts_with("tmux") {
@@ -79,6 +84,9 @@ pub fn image_disable_reason(term: Option<&str>, in_tmux: bool) -> Option<&'stati
     }
     if term.starts_with("screen") {
         return Some("screen does not support kitty graphics escapes");
+    }
+    if !stdout_is_terminal {
+        return Some("stdout is not a terminal");
     }
     None
 }
