@@ -1917,11 +1917,21 @@ mod mermaid_rendering {
             "stateDiagram-v2\n    [*] --> Still\n    Still --> Moving\n",
             "erDiagram\n    CUSTOMER ||--o{ ORDER : places\n",
         ] {
-            let rendered = merman::svg::HeadlessRenderer::new()
-                .render_resvg_compatible_svg_sync(source)
-                .expect("render should succeed")
-                .expect("diagram type should be detected");
-            let svg = rendered.as_str();
+            let request = merman::SvgRequest {
+                pipeline: Some(merman::svg::SvgPipeline::resvg_safe()),
+                ..Default::default()
+            };
+            let output = merman::Renderer::new()
+                .render(merman::RenderRequest::svg(
+                    source,
+                    merman::OperationControl::new(),
+                    request,
+                ))
+                .expect("render should succeed");
+            let merman::RenderOutput::Svg(Some(rendered)) = output else {
+                panic!("diagram type should be detected for source: {:?}", source);
+            };
+            let svg = rendered.svg();
             assert!(
                 !svg.contains("foreignObject"),
                 "resvg-safe SVG still contains foreignObject for source: {:?}",
