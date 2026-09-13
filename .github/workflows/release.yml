@@ -25,9 +25,16 @@ jobs:
 
       - name: Install Zig
         uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
 
+      # Pinned: 0.23.4 rewrites rustc's `-Wl,<path>` arguments to bare positional
+      # paths, which breaks the `-Wl,-exported_symbols_list -Wl,<path>` pair rustc
+      # emits for cdylibs on Apple targets (htmlentity is cdylib+rlib), and the
+      # link fails with `unable to read exported symbols list '-dead_strip'`.
+      # See https://github.com/rust-cross/cargo-zigbuild/pull/477.
       - name: Install cargo-zigbuild
-        run: cargo install cargo-zigbuild
+        run: cargo install cargo-zigbuild --version 0.23.3 --locked
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
