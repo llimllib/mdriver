@@ -93,14 +93,20 @@ homebrew_casks:
     commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
     homepage: "https://github.com/llimllib/mdriver"
     description: "Streaming markdown printer for the terminal with syntax highlighting"
-    url:
-      verified: "github.com/llimllib/mdriver"
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/mdriver"]
-          end
+    # Strip the quarantine attribute so macOS doesn't refuse to run the binary.
+    #
+    # This would normally be `hooks.post.install`, but that generates a
+    # `postflight` stanza, which homebrew has deprecated in favor of
+    # `postflight_steps`. Until goreleaser grows a `hooks.post.install_steps`
+    # (https://github.com/goreleaser/goreleaser/pull/6873), emit the stanza
+    # ourselves. `{{staged_path}}` is a homebrew token, so it has to be escaped
+    # from goreleaser's own templating.
+    custom_block: |
+      postflight_steps do
+        on_macos do
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/mdriver"]
+        end
+      end
 
 announce:
   skip: "true"
