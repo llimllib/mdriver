@@ -1608,13 +1608,23 @@ impl StreamingParser {
         let (tx, rx) = std::sync::mpsc::channel();
         let source_clone = source.clone();
         std::thread::spawn(move || {
-            // Use the resvg-compatible pipeline: Mermaid-parity SVG puts labels inside
+            // Use the resvg-safe pipeline: Mermaid-parity SVG puts labels inside
             // <foreignObject> HTML for flowcharts, class/ER/state diagrams, mindmaps and
             // kanban. resvg does not implement foreignObject, so those labels would be
             // silently dropped. This pipeline converts HTML labels to native SVG <text>.
-            let result = merman::svg::HeadlessRenderer::new()
-                .render_resvg_compatible_svg_sync(&source_clone)
-                .map(|opt| opt.map(|svg| svg.into_string()));
+            let request = merman::SvgRequest {
+                pipeline: Some(merman::svg::SvgPipeline::resvg_safe()),
+                ..Default::default()
+            };
+            // The deadline is the renderer's own view of the timeout below, so a slow
+            // diagram stops working instead of burning a thread after we give up on it.
+            let control = merman::OperationControl::new().with_deadline(MERMAID_RENDER_TIMEOUT);
+            let result = merman::Renderer::new()
+                .render(merman::RenderRequest::svg(&source_clone, control, request))
+                .map(|output| match output {
+                    merman::RenderOutput::Svg(svg) => svg.map(|svg| svg.into_parts().0),
+                    _ => None,
+                });
             // Ignore send errors — receiver may have timed out and been dropped
             let _ = tx.send(result);
         });
@@ -1667,12 +1677,18 @@ impl StreamingParser {
         // Every failure here degrades to a plain code block, which looks deliberate.
         // Say which failure it was, or the user has no way to tell an unsupported
         // diagram feature from a syntax error or a too-wide drawing.
-        let diagram = match merman::ascii::HeadlessAsciiRenderer::new()
-            .with_charset(merman::ascii::AsciiCharset::Unicode)
-            .render_ascii_sync(&source)
-        {
-            Ok(Some(diagram)) => diagram,
-            Ok(None) => {
+        let request = merman::AsciiRequest {
+            options: merman::ascii::AsciiRenderOptions::unicode(),
+            ..Default::default()
+        };
+        let rendered = merman::Renderer::new().render(merman::RenderRequest::ascii(
+            &source,
+            merman::OperationControl::new(),
+            request,
+        ));
+        let diagram = match rendered {
+            Ok(merman::RenderOutput::Ascii(Some(output))) => output.text,
+            Ok(_) => {
                 debug!("mermaid: no diagram detected in fenced block; rendering as code");
                 return None;
             }
