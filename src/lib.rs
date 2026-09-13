@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use htmlentity::entity::{decode as decode_html_entity_bytes, ICodedDataTrait};
 use log::{debug, warn};
 use syntect::easy::HighlightLines;
 use syntect::parsing::SyntaxSet;
@@ -10,6 +9,7 @@ use syntect::util::as_24_bit_terminal_escaped;
 use two_face::theme::{EmbeddedLazyThemeSet, EmbeddedThemeName};
 use unicode_width::UnicodeWidthStr;
 
+mod entities;
 pub mod logging;
 
 // Static theme set using two-face's extended themes
@@ -3868,14 +3868,41 @@ fn decode_html_entity(chars: &[char], start: usize) -> Option<(String, usize)> {
     // Extract the potential entity (including & and optional ;)
     let entity_str: String = chars[start..end].iter().collect();
 
-    // Use htmlentity crate to decode
-    let decoded = decode_html_entity_bytes(entity_str.as_bytes());
-    if let Ok(decoded_str) = decoded.to_string() {
-        // Check if decoding actually changed anything
-        if decoded_str != entity_str {
-            return Some((decoded_str, end - start));
-        }
+    // HTML5 requires the terminating semicolon; "&nbsp" stays literal text.
+    let body = entity_str.strip_suffix(';')?.strip_prefix('&')?;
+    if body.is_empty() {
+        return None;
     }
 
-    None
+    let decoded = if let Some(digits) = body.strip_prefix('#') {
+        decode_numeric_entity(digits)?
+    } else {
+        entities::lookup(&entity_str)?.to_string()
+    };
+
+    Some((decoded, end - start))
+}
+
+/// Decode the body of a numeric character reference: the text between `&#` and
+/// `;`, so `123` for `&#123;` or `x7B` for `&#x7B;`. Returns None if that text
+/// isn't a well-formed number, in which case the reference is left as literal
+/// text. Per the spec, a well-formed number that isn't a valid scalar value
+/// (zero, a surrogate, or beyond U+10FFFF) decodes to U+FFFD.
+fn decode_numeric_entity(digits: &str) -> Option<String> {
+    let (digits, radix) = match digits.strip_prefix(['x', 'X']) {
+        Some(hex) => (hex, 16),
+        None => (digits, 10),
+    };
+    if digits.is_empty() || !digits.chars().all(|c| c.is_digit(radix)) {
+        return None;
+    }
+
+    // Out-of-range values overflow u32 rather than parsing; both mean U+FFFD.
+    let decoded = u32::from_str_radix(digits, radix)
+        .ok()
+        .filter(|&code| code != 0)
+        .and_then(char::from_u32)
+        .unwrap_or(char::REPLACEMENT_CHARACTER);
+
+    Some(decoded.to_string())
 }
