@@ -922,6 +922,44 @@ mod html_entities {
         let result = p.format_inline("Note&dagger; and &Dagger;");
         assert_eq!(result, "Note† and ‡");
     }
+
+    // Entities whose expansion is more than one codepoint
+    #[test]
+    fn test_multi_codepoint_entity() {
+        let p = parser();
+        let result = p.format_inline("a &NotEqualTilde; b");
+        assert_eq!(result, "a ≂̸ b");
+    }
+
+    // Numeric references that name no scalar value decode to U+FFFD
+    #[test]
+    fn test_numeric_entity_null() {
+        let p = parser();
+        let result = p.format_inline("&#0;");
+        assert_eq!(result, "\u{fffd}");
+    }
+
+    #[test]
+    fn test_numeric_entity_surrogate() {
+        let p = parser();
+        let result = p.format_inline("&#xD800;");
+        assert_eq!(result, "\u{fffd}");
+    }
+
+    #[test]
+    fn test_numeric_entity_out_of_range() {
+        let p = parser();
+        let result = p.format_inline("&#x110000; &#99999999999;");
+        assert_eq!(result, "\u{fffd} \u{fffd}");
+    }
+
+    // Malformed numbers aren't character references at all, so they stay literal
+    #[test]
+    fn test_malformed_numeric_entity_preserved() {
+        let p = parser();
+        let result = p.format_inline("&#; &#xZZ; &#12a;");
+        assert_eq!(result, "&#; &#xZZ; &#12a;");
+    }
 }
 
 mod reference_links {

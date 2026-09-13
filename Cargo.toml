@@ -27,7 +27,6 @@ base64 = "0.23.0"
 term_size = "0.3.2"
 resvg = { version = "0.48.1", default-features = false, features = ["text", "system-fonts", "raster-images"] }
 unicode-width = "0.2.2"
-htmlentity = "1.3.2"
 # Pinned exactly: merman's alpha releases make breaking API changes, and Cargo.lock
 # is not committed, so a caret requirement lets CI pick up an alpha that no longer
 # compiles against this code. Bump this deliberately.
